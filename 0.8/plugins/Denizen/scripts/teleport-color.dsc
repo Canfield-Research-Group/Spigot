@@ -48,8 +48,8 @@ add_teleporter:
         - stop
 
     - define base_path teleporters.<[color]>
-    # NOTE: The warning /error notifyinf us that list_flags is debug only scan be ignored
-    # there is no curent work around for using this
+    # *** WARNING: The warning /error notifyinf us that list_flags is debug only scan be ignored
+    # *** there is no curent work around for using this
     - define all_flags <[player].list_flags[]>
     - define group_keys <[all_flags].filter[starts_with[<[base_path]>]]>
     - narrate "Teleport flags: <[group_keys]>"
@@ -93,7 +93,7 @@ begin_teleport:
 # Perform teleport
 do_teleport:
   type: task
-  debug: true
+  debug: false
   definitions: player|loc
   script:
     # Get material color (carpet) and loc key
@@ -102,13 +102,14 @@ do_teleport:
     - define owner null
 
     # Find the owner of this teleporter (online only)
-    - foreach <server.online_players> as:other:
-        - if <[other].has_flag[teleporters.<[color]>.<[loc_key]>]>:
-            - define owner <[other]>
+    - define all_players <proc[get_all_players]>
+    - foreach <[all_players]> as:player_search:
+        - if <[player_search].has_flag[teleporters.<[color]>.<[loc_key]>]>:
+            - define owner <[player_search]>
             - foreach stop
 
     - if <[owner]> == null:
-        - debug error "Teleporter at <[loc]> has no known owner."
+        - narrate  "<red>Teleporter at <[loc]> has no known owner. Please report as a bug."
         - stop
 
     # Retrieve teleporter map for owner and color
@@ -117,44 +118,38 @@ do_teleport:
         - narrate "<gold>Only one teleporter in group; no teleport triggered."
         - stop
 
-    # Build LIST sortable list of teleporters with metadata needed plus the orginalk key. This
-    # can be sorted by a sub-key when the original flags cannot be because Denizen cannot relaible sort
-    # a KEYED  (map) array.
-    - debug debug "<gold>***** MAP: <[map]>"
-    - define teleporters <list[]>
+    # Scan loop (once) finding first / next assuming 'created' is unique
+    - define first null
+    - define next null
+
+    # Avoid nesting tags when possible, it more than not fails in Denzien parser and makes things more complicated
+    - define item <[map].get[<[loc_key]>]>
+    - define current_created <[item].get[created]>
+
     - foreach <[map].keys> as:key:
         - define item <[map].get[<[key]>]>
-        - debug debug "<gold>***** ITEM: <[item]> for key: <[key]>"
-        # DO NOT add spaces around semi-collons or '=' these will contirbute to the KEY name.'
-        - define entry <map[key=<[key]>;created=<[item].get[created]>;loc=<[item].get[loc]>]>
-        - define teleporters <[teleporters].include[<[entry]>]>
+        - define teleporter_current <[item].get[created]>
 
-    - debug debug "<gold>***** teleporters: <[teleporters]>"
+        # Track lowest for firtst
+        - if <[first]> == null || <[teleporter_current]> < <[first].get[created]>:
+            - define first <[item]>
 
-    # Sort by created timestamp
-    - define sorted <[teleporters].sort_by_number[created]>
+        # Track nearest higher (wraps)
+        - if <[teleporter_current]> > <[current_created]>:
+            - if <[next]> == null || <[teleporter_current]> < <[next].get[created]>:
+                - define next <[item]>
 
-    # Find index of the current teleporter
-    - define index -1
-    - define counter 1
-    - foreach <[sorted]> as:item:
-        - if <[item].get[key]> == <[loc_key]>:
-            - define index <[counter]>
-            - foreach stop
-        - define counter <[counter].add[1]>
-
-    - if <[index]> == -1:
-        - debug error "Current teleporter <[loc_key]> not found in sorted list."
+    # identify where to go
+    - if <[next]> !=  null:
+      - define found <[next]>
+    - else if <[first]> !=  null:
+      - define found <[first]>
+    - else:
+        - narrate "<gold>No teleporer identitied, possible bug."
         - stop
 
     # Find next teleport target (with wraparound)
-    - define next_index <[index].add[1]>
-    - if <[next_index]> > <[sorted].size>:
-      - define counter 1
-    - define next <[sorted].get[<[next_index]>]>
-    - debug debug "<gold>********* NEXT: <[next]>"
-    - define next_loc <[next].get[loc]>
-    - debug debug "<gold>********* LOCK: <[next_loc]>"
+    - define next_loc <[found].get[loc]>
 
     # Teleport and show effect
     - teleport <[player]> <[next_loc].add[0,1,0]>
@@ -182,10 +177,22 @@ get_teleporter_list:
     - determine <map[]>
 
 
+# Return all players online or off
+get_all_players:
+  type: procedure
+  debug: false
+  script:
+
+  - define all_players <server.offline_players>
+  - define all_players <[all_players].include[<server.online_players>]>
+  - determine <[all_players]>
+
+
 # *** COMMANDS
 teleport_color_commands:
   type: command
   name: teleport-color
+  debug: debug
   description: Manages teleport color teleporters
   usage: /teleport-color [clear | list] [color|all] [player (OP only)]
   tab complete:
@@ -208,8 +215,12 @@ teleport_color_commands:
         - if !<player.is_op>:
             - narrate "<red>You do not have permission to manage other players' teleporters." targets:<player>
             - stop
-        - define target <server.match_player[<context.args.get[3]>]>
-        - if <[target]> == null:
+
+        - define player_name <context.args.get[3]>
+        # Match_offline_ wills earch for online/offline by a case insensitive flexible matching.
+        # The online_players and offline_players are specific to these states.
+        - define target <server.match_offline_player[<[player_name]>]>
+        - if <[target]> == -1:
             - narrate "<red>Player '<context.args.get[3]>' not found." targets:<player>
             - stop
 
@@ -218,7 +229,7 @@ teleport_color_commands:
         - define base <[target].flag[teleporters]>
         - if <[color]> == "all":
             - flag <[target]> teleporters:!
-            - narrate "<gray>All teleporters cleared for <[target].name>." targets:<player>
+            - narrate "<gray>All teleporters1 cleared for <[target].name>." targets:<player>
             - stop
         - if !<[base].keys.contains[<[color]>]>:
             - narrate "<red>No teleporters found for color '<[color]>'." targets:<player>
