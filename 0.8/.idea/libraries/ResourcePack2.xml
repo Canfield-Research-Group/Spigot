@@ -1,0 +1,9 @@
+<component name="libraryTable">
+  <library name="ResourcePack2">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/Nova.purpur-1.20.1/resource_pack/ResourcePack.zip!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

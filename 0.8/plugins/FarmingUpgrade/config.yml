@@ -1,0 +1,194 @@
+# FarmingUpgrade configuration
+# Default configuration: https://github.com/hypmc/FarmingUpgrade/blob/master/src/main/resources/config.yml
+# List of materials: https://hub.spigotmc.org/javadocs/spigot/org/bukkit/Material.html
+
+
+# Configuration version. Do not modify.
+version: 6
+
+
+# The server requires the plugin. If the plugin fails, shut down the server.
+required: false
+
+
+# Upgraded harvesting mechanics.
+# Remove, rename or comment out this section to disable the upgraded farming tools feature.
+toolUpgrade:
+  # Harvest radius increase from each level of the efficiency enchantment. Final product is rounded down.
+  radiusPerEfficiencyLevel: 0.3
+  # The unbreaking enchantment has a chance to prevent tools from taking damage when harvesting crops.
+  applyUnbreaking: true
+  # Harvesting tools only break mature crops.
+  onlyHarvestMature: true
+  # Minimum and maximum number of ticks to wait between harvesting and replanting. A random number in the range is sampled.
+  # Set both to 0 to replant instantly.
+  replantDelayMinimum: 10
+  replantDelayMaximum: 20
+  # Control the number of particles that appear when harvesting and replanting.
+  # 1.0: default, 0.5: half as many, 0.0: none, 2.0: twice as many, etc.
+  harvestParticleMultiplier: 1.0
+  replantParticleMultiplier: 1.0
+  plantParticleMultiplier: 1.0
+  # Show the tool swing particle effect when harvesting.
+  toolSwingParticleEffect: true
+  # Replant a crop automatically after harvesting it if a seed is dropped.
+  # This is a default value for every tool. This can be overridden by specific tool properties.
+  replantDefault: true
+  # Dropped items from crops broken by a hoe are collected in the player's inventory if there is space.
+  # This is a default value for every tool. This can be overridden by specific tool properties.
+  collectDefault: false
+  # Determines if a tool can plant seeds on all empty farmland within the tool radius by default. This can be overridden by specific tool properties.
+  plantDefault: true
+  # Default damage that a tool takes when harvesting crops. This can be overridden by specific tool properties.
+  damageDefault: 1
+  # A list of crops and their seeds.
+  crops:
+    - crop: WHEAT
+      seeds: WHEAT_SEEDS
+    - crop: POTATOES
+      seeds: POTATO
+    - crop: CARROTS
+      seeds: CARROT
+    - crop: BEETROOTS
+      seeds: BEETROOT_SEEDS
+    - crop: NETHER_WART
+      seeds: NETHER_WART
+  # A list of harvesting tools and their filters and features.
+  #
+  # The first (ordered from top to bottom) tool with filters allowing an item, is the one that is used to determine the item's tool features. If no tool matches an item, then the item is not a harvesting tool.
+  #
+  # Tool filters:
+  # - material: String/Material OR List of Materials. The tool must be of one of these materials. Remove to allow any material.
+  # - lore: String. The item must have this string [as a substring, somewhere] in its lore. Remove to allow any lore.
+  # - permission: String/Permission. The user must have this permission. Remove to allow any permissions.
+  # - nbt: String. The item must have this FarmingUpgrade NBT-tag set to true. Remove to allow any NBT-tags.
+  #   Example: If "nbt: golden", then the NBT-tag PublicBukkitValues/"farmingupgrade:golden" must be set to true (nonzero byte).
+  #   Such an item can be created with the command [ /give @p minecraft:golden_hoe{PublicBukkitValues:{"farmingupgrade:golden":1b}} ].
+  # - crops: String/Material OR List of Materials. An exclusive list of crops that this tool can be applied to. Remove to apply tool to any crop.
+  #
+  # Tool features:
+  # - radius: Decimal. Base tool radius. Total radius may be affected by other modifiers. The total radius is rounded down. 0 radius means that only the clicked block is affected.
+  # - replant: Boolean. The tool replants a crop automatically after harvesting it.
+  # - collect: Boolean. Any drops are collected immediately and placed in the inventory when using this tool.
+  # - plant: Boolean. The plant property determines if a tool can plant seeds in the radius. Planting seeds do not damage the tool, only harvesting does.
+  # - damage: Integer. Tool damage taken when harvesting a crop. Note that if an item has the attribute "Unbreakable" it will never take any damage.
+  tools:
+
+    # Permission example - Player can use anything as a tool if he has permission "farmer".
+    #
+    #    - permission: farmer
+    #      radius: 1.5
+
+    # Fake lore enchantments
+    #
+    #    - lore: Harvest I
+    #      radius: 1.5
+    #    - lore: Harvest II
+    #      radius: 2.5
+
+    # Example of permission enabling replant for wooden hoes.
+    #
+    #    - material: WOODEN_HOE
+    #      permission: replant
+    #      radius: 0.5
+    #      replant: true
+    #
+    #    - material: WOODEN_HOE
+    #      radius: 0.5
+    #      replant: false
+
+    # Example of tool that can plant seeds.
+    #
+    #    - material: IRON_HOE
+    #      radius: 1.5
+    #      plant: true
+
+    # Example of a tool that only harvests, plants and collects potatoes, carrots and beetroots.
+    #
+    #    - nbt: earth
+    #      crops: [POTATOES, CARROTS, BEETROOTS]
+    #      radius: 1.5
+    #      collect: true
+    #
+    #    - nbt: earth
+    #      radius: 0
+    #      replant: false
+    #      plant: false
+
+    # Hoes
+    - material: WOODEN_HOE
+      radius: 0.5
+    - material: STONE_HOE
+      radius: 0.5
+    - material: IRON_HOE
+      radius: 1.5
+    - material: GOLDEN_HOE
+      radius: 1.5
+    - material: DIAMOND_HOE
+      radius: 2.5
+    - material: NETHERITE_HOE
+      radius: 2.5
+
+    # Swords
+    - material: [WOODEN_SWORD, STONE_SWORD, IRON_SWORD, GOLDEN_SWORD, DIAMOND_SWORD, NETHERITE_SWORD]
+      radius: 0
+      damage: 2
+
+
+# Upgraded water search and Farmland hydration mechanics.
+# Remove, rename or comment out this section to disable the upgraded hydration feature.
+# Use upgraded water search to hydrate Farmland. (Vanilla: false)
+hydrationUpgrade:
+  # The horizontal radius from a centre Farmland to look for water. (Vanilla: 4).
+  horizontalSearchRadius: 4
+  # The highest altitude relative to the Farmland to search for water. (Vanilla: 0).
+  upwardSearchDistance: 1
+  # The lowest altitude relative to the Farmland to search for water. (Vanilla: 0).
+  downwardSearchDistance: 1
+  # Farmland that is not hydrated will eventually turn to Dirt. (Vanilla: true).
+  dry: false
+
+
+# Bonemeal upgrade
+# Remove, rename or comment out this section to disable the upgraded bonemeal feature.
+# Upgraded bonemeal mechanics. Bonemeal has a radius of 1 and is weaker on individual crops, but more efficient than
+# Vanilla bonemeal when used to fertilise multiple crops.
+# Enable upgraded bonemeal mechanics. (Vanilla: false)
+bonemealUpgrade:
+  # Radius of upgraded bonemeal. Make sure to also adjust plant growth rate when changing the radius.
+  radius: 1
+  # Number of trials to run for each crop. Adjust growth chance during each trial below.
+  trials: 8
+  # Target growth stages for one bonemeal. This determines the maximum growth per bonemeal.
+  targetGrowthStages: 8
+  # Ticks until the bonemeal affects a fertilised crop. Set both to 0 to fertilise instantly.
+  minimumDelay: 0
+  maximumDelay: 0
+  fertiliseParticleMultiplier: 1.0
+  # A list of fertilisable plants and their expected growth.
+  plants:
+    - plant: WHEAT
+      growth: 0.50 # Chance of advancing a stage with each trial.
+    - plant: POTATOES
+      growth: 0.50
+    - plant: CARROTS
+      growth: 0.50
+    - plant: BEETROOTS # All crops have 8 stages, except beetroots which has 4
+      growth: 0.25
+    - plant: MELON_STEM
+      growth: 0.50
+    - plant: PUMPKIN_STEM
+      growth: 0.50
+
+
+# Upgraded crop trampling.
+# Remove, rename or comment out this section to disable the upgraded crop trampling feature.
+# Crops are trampled (reset to their first growth stage) instead of Farmland. (Vanilla: false)
+trampleUpgrade:
+  # Crops are trampled by walking or running over them.
+  trampleByWalking: false
+  # Farmland can be trampled back to dirt if there is nothing growing on it.
+  dryEmptyOnTrample: true
+  trampleParticleMultiplier: 1.0
+  # A list of crops that can be trampled.
+  trampleableCrops: [WHEAT, MELON_STEM, PUMPKIN_STEM]

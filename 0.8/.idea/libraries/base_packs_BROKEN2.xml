@@ -1,0 +1,10 @@
+<component name="libraryTable">
+  <library name="base_packs.BROKEN2">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/Nova/resource_pack/base_packs.BROKEN/PortalGun-By-Fentis-1.0.1.zip!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/Nova/resource_pack/base_packs.BROKEN/Tweakin-Resource-Pack-main.zip!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

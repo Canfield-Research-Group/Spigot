@@ -1,0 +1,10 @@
+<component name="libraryTable">
+  <library name="ResourcePack">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/ResourcePack/Tweakin-Resource-Pack-main.zip!/" />
+      <root url="jar://$PROJECT_DIR$/ResourcePack/PortalGun-By-Fentis-1.0.1.zip!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

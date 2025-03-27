@@ -1,0 +1,13 @@
+<component name="libraryTable">
+  <library name="addons3">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/Nova/addons/Simple-Upgrades-1.2-RC.1.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/Nova/addons/Logistics-0.2.7-RC.2.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/Nova/addons/Vanilla-Hammers-1.3-RC.1.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/Nova/addons/Machines-0.4.4-RC.1.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/Nova/addons/Jetpacks-0.1.11-RC.1.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

@@ -1,0 +1,9 @@
+<component name="libraryTable">
+  <library name="more-iron-datapack">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/world/datapacks/more-iron-datapack.zip!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

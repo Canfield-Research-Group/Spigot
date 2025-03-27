@@ -1,0 +1,10 @@
+<component name="libraryTable">
+  <library name="1.1.1">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/plugins/GravesX/lib/com/google/auto/service/auto-service-annotations/1.1.1/auto-service-annotations-1.1.1.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins/GravesX/lib/com/google/auto/service/auto-service-annotations/1.1.1/auto-service-annotations-1.1.1.jar-relocated-1226089830.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

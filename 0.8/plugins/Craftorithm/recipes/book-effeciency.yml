@@ -1,0 +1,12 @@
+type: shaped
+shape:
+- aba
+- cdc
+- ccc
+source:
+  a: minecraft:redstone
+  b: minecraft:writable_book
+  c: minecraft:emerald
+  d: minecraft:iron_pickaxe
+unlock: true
+result: items:gui_items:9b7b8b86-5d82-4c6c-bac0-27ab9609dd95

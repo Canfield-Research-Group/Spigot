@@ -1,0 +1,63 @@
+d3783e8c-b488-4464-8f01-42ec0d2376b9:
+  ==: org.bukkit.inventory.ItemStack
+  v: 4189
+  type: ENCHANTED_BOOK
+  meta:
+    ==: ItemMeta
+    meta-type: ENCHANTED
+    stored-enchants:
+      minecraft:silk_touch: 1
+4fae917e-283f-46b8-a188-0fd26d6af53f:
+  ==: org.bukkit.inventory.ItemStack
+  v: 4189
+  type: ENCHANTED_BOOK
+  meta:
+    ==: ItemMeta
+    meta-type: ENCHANTED
+    stored-enchants:
+      minecraft:looting: 1
+9b7b8b86-5d82-4c6c-bac0-27ab9609dd95:
+  ==: org.bukkit.inventory.ItemStack
+  v: 4189
+  type: ENCHANTED_BOOK
+  meta:
+    ==: ItemMeta
+    meta-type: ENCHANTED
+    stored-enchants:
+      minecraft:efficiency: 1
+3f2a7c8d-1247-4091-9405-2a9e612d1870:
+  ==: org.bukkit.inventory.ItemStack
+  v: 4189
+  type: ENCHANTED_BOOK
+  meta:
+    ==: ItemMeta
+    meta-type: ENCHANTED
+    stored-enchants:
+      minecraft:protection: 1
+8c66fcb7-3b9c-4641-8d76-b83977b2ebf2:
+  ==: org.bukkit.inventory.ItemStack
+  v: 4189
+  type: ENCHANTED_BOOK
+  meta:
+    ==: ItemMeta
+    meta-type: ENCHANTED
+    stored-enchants:
+      minecraft:sharpness: 1
+f694f899-cbd0-4631-93a4-49c3b58b0191:
+  ==: org.bukkit.inventory.ItemStack
+  v: 4189
+  type: ENCHANTED_BOOK
+  meta:
+    ==: ItemMeta
+    meta-type: ENCHANTED
+    stored-enchants:
+      minecraft:thorns: 1
+2af63147-b56e-465e-9081-3f5117f6df4f:
+  ==: org.bukkit.inventory.ItemStack
+  v: 4189
+  type: ENCHANTED_BOOK
+  meta:
+    ==: ItemMeta
+    meta-type: ENCHANTED
+    stored-enchants:
+      minecraft:unbreaking: 1

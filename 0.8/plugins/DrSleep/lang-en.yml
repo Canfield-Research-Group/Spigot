@@ -1,0 +1,17 @@
+# This is the main language file for DrSleep
+
+now-preventing-skip: '&aYou are now preventing sleeping through the night.'
+reloaded: '&aDrSleep reloaded.'
+now-allowing-skip: '&aYou are already allowing sleeping through the night.'
+preventing-skip-list-header: '&eThe following players are preventing sleeping through
+  the night:'
+preventing-skip-list-item: '&e%WORLD%: %PLAYERS%'
+not-player: '&4This command can only be executed by players.'
+skipped-night: |-
+  &e%PLAYER% slept in a bed and slept through the night.
+  &eIf you would like to prevent sleeping through the night, use /preventsleep
+cannot-skip: '&4You cannot sleep through the night now.'
+disallowed-world: '&4That command cannot be used in this world.'
+list-cleared: '&aList cleared.'
+already-allowing-sleep: '&4You are already allowing sleeping through the night.'
+already-preventing-sleep: '&4You are already preventing sleeping through the night.'

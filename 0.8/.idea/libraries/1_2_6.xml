@@ -1,0 +1,10 @@
+<component name="libraryTable">
+  <library name="1.2.6">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/plugins/GravesX/lib/com/github/puregero/regionized-paper/1.2.4/regionized-paper-1.2.4.jar-relocated-1902237652.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins/GravesX/lib/com/github/puregero/regionized-paper/1.2.4/regionized-paper-1.2.4.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

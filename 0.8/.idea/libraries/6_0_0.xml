@@ -1,0 +1,10 @@
+<component name="libraryTable">
+  <library name="6.0.0">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/plugins/GravesX/lib/com/zaxxer/HikariCP/6.0.0/HikariCP-6.0.0.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins/GravesX/lib/com/zaxxer/HikariCP/6.0.0/HikariCP-6.0.0.jar-relocated-1527091652.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

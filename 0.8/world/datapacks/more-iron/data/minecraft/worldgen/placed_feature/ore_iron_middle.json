@@ -1,0 +1,29 @@
+// file: ore_iron_middle.json
+// original count: 10
+{
+  "feature": "minecraft:ore_iron",
+  "placement": [
+    {
+      "type": "minecraft:count",
+      "count": 13
+    },
+    {
+      "type": "minecraft:in_square"
+    },
+    {
+      "type": "minecraft:height_range",
+      "height": {
+        "type": "trapezoid",
+        "min_inclusive": {
+          "absolute": -24
+        },
+        "max_inclusive": {
+          "absolute": 56
+        }
+      }
+    },
+    {
+      "type": "minecraft:biome"
+    }
+  ]
+}

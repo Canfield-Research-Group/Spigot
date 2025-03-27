@@ -1,0 +1,10 @@
+<component name="libraryTable">
+  <library name="resourcepacks2">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/Nova/resource_pack/.mcassets/assets/minecraft/resourcepacks/high_contrast.zip!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/Nova/resource_pack/.mcassets/assets/minecraft/resourcepacks/programmer_art.zip!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

@@ -1,0 +1,10 @@
+<component name="libraryTable">
+  <library name="2.8.0">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/plugins/GravesX/lib/com/google/code/gson/gson/2.8.0/gson-2.8.0.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins/GravesX/lib/com/google/code/gson/gson/2.8.0/gson-2.8.0.jar-relocated-1226089830.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

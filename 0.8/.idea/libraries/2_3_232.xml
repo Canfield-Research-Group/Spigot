@@ -1,0 +1,10 @@
+<component name="libraryTable">
+  <library name="2.3.232">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/plugins/GravesX/lib/com/h2database/h2/2.3.232/h2-2.3.232.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins/GravesX/lib/com/h2database/h2/2.3.232/h2-2.3.232.jar-relocated-801772417.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

@@ -1,0 +1,10 @@
+<component name="libraryTable">
+  <library name="1.7.36">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/plugins/GravesX/lib/org/slf4j/slf4j-api/1.7.36/slf4j-api-1.7.36.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins/GravesX/lib/org/slf4j/slf4j-api/1.7.36/slf4j-api-1.7.36.jar-relocated-1527091652.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

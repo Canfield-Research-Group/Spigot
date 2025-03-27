@@ -1,0 +1,9 @@
+<component name="libraryTable">
+  <library name="unifont">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/Nova.purpur-1.20.1/resource_pack/.mcassets/assets/minecraft/font/unifont.zip!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

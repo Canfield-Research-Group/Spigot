@@ -1,0 +1,15 @@
+type: shaped
+shape:
+  - aba
+  - cdc
+  - efe
+source:
+  a: minecraft:feather
+  b: minecraft:sugar_cane
+  c: minecraft:glowstone_dust
+  d: minecraft:quartz
+  e: minecraft:feather
+  f: minecraft:sugar_cane
+unlock: true
+priority: highest
+result: minecraft:elytra

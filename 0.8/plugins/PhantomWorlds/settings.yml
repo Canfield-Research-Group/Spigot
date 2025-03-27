@@ -1,0 +1,46 @@
+# .___  _                     .                     .       __               .        _
+# /   \ /        ___  , __   _/_     __.  , _ , _   /       |    __.  .___   |     ___/   ____
+# |,_-' |,---.  /   ` |'  `.  |    .'   \ |' `|' `. |       |  .'   \ /   \  |    /   |  (
+# |     |'   ` |    | |    |  |    |    | |   |   | |  /\   /  |    | |   '  |   ,'   |  `--.
+# /     /    | `.__/| /    |  \__/  `._.' /   '   / |,'  \,'    `._.' /     /\__ `___,' \___.'
+
+# Should PW run an update check from the Spigot page on startup?
+run-update-checker: true
+
+#Configurations relating to spawn controls.
+spawning:
+
+  #What is the spawn world for the server? If the player hasn't played before this is the world that
+  #they will go to.
+  default-world: world
+
+  #If players should be sent to the default-world if they haven't played before.
+  default-first: true
+
+  #Should players respawn at the world spawn if they don't have a bed?
+  # RC: respawn-world: true => false
+  respawn-world: false
+
+  #Should players respawn at the world spawn everytime they join?
+  # RC: respawn-always: true ==> false
+  respawn-always: false
+
+  #Should players be sent to the world spawn each time they change worlds?
+  change: false
+
+#Should worlds deleted be moved to an archive folder in deletedworlds?
+delete-archive: true
+
+#Should worlds be automatically backed up to the backup folder?
+backup-scheduler: false
+
+#Should PW regenerate worlds in the config that are missing from disk?
+regenerate-missing-worlds: false
+
+#The time, in seconds, to back up every PhantomWorlds-managed world.
+backup-delay: 600
+
+# Do not touch anything here unless you know what you are doing.
+advanced:
+  file-version: 5
+  generated-with: '${project.version}'

@@ -1,0 +1,36 @@
+# ------------------------------------------------------------------------- #
+#                                 RHLeafDecay                               #
+#                                 ===========                               #
+#                    Thank you for using "RHLeafDecay"!~                    #
+#         If you like my plugin, please consider giving it a star.          #
+#     I'm always open to suggestions for improvements or new ideas! :)      #
+# ------------------------------------------------------------------------- #
+#  In this file, you can configure how the plugin should work.              #
+#                                                                           #
+#  You can change the decay-mode while choosing one of the following:       #
+#     1    -   the default mode, breaks leaves in clusters (faster)         #
+#     2    -   the single mode, breaks leaves one by one (slower)           #
+#                                                                           #
+#  The ticks between every block decay and every check can be adjusted too  #
+#  Changing those values will increase or decrease the speed.               #
+#  Important:                                                               #
+#  Please note, that the 'break' tick rate should never below 5!            #
+#  Changing those values will increase or decrease the speed.               #
+#  The performance hit can be higher, if you choose a lower tick rate!      #
+# ------------------------------------------------------------------------- #
+
+settings:
+  decay:
+    mode: 1
+    ticks:
+      break: 8
+      check: 4
+  features:
+    drops: true
+    particles: true
+    sounds: true
+  filters:
+    whitelist: []
+    blacklist:
+      - "Excluded_World"
+      - "ThisWorldWillBeIgnored"

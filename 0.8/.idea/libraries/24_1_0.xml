@@ -1,0 +1,10 @@
+<component name="libraryTable">
+  <library name="24.1.0">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/plugins/GravesX/lib/org/jetbrains/annotations/24.1.0/annotations-24.1.0.jar-relocated-1226089830.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins/GravesX/lib/org/jetbrains/annotations/24.1.0/annotations-24.1.0.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

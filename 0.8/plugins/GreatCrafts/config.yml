@@ -1,0 +1,153 @@
+# GreatCrafts config
+
+
+# Setting to unlock custom crafts
+#   never - Never automatically unlocks custom recipes
+#   have-each - Automatically unlocks custom recipes if the player has each of the required ingredients
+#                 To fix O(scary) stuff, you'll only need 1 of each item, e.g. if the requirement is 2 diamonds and
+#                 2 emeralds, the player only needs 1 diamond and 1 emerald.
+#   have-one - Automatically unlocks custom recipes if the player has at least one of the required ingredients
+#   always - Automatically unlocks all custom recipes immediately
+automatically-unlock-recipes: never
+# Exceptions to the general rule you set above. You can give each recipe a specific unlock condition.
+automatically-unlock-recipes-exceptions:
+  # Format: "namespace:name": never/have-each/have-one/always
+  greatcrafts:_always_unlock_me: always
+  greatcrafts:_easily_unlock_me: have-one
+
+
+# You can change the messages used by the plugin here.
+# The general format is
+#   message-thing:
+#   - "Line 1"
+#   - "Line 2"
+#   - "..."
+# Use § or & for color codes.
+language-settings:
+  
+  # When an exact match is missed in a stacked items craft, usually because it's mirrored
+  # Placeholders: %recipekey% = the recipe key
+  stackedItemsErrorMissedExactMatch:
+  - §cThe recipe doesn't exactly match!
+  - §3You probably mirrored the recipe.
+  - §3Check §f/viewrecipe %recipekey% §3to make the craft.
+  
+  # When you don't have enough items to make the stacked items craft.
+  # Placeholders: %recipekey% = the recipe key
+  stackedItemsErrorNotEnoughItems:
+  - §cYou don't have enough items in the crafting table!
+  - §3This is a special §bstacked items §3recipe.
+  - §3Check §f/viewrecipe %recipekey% §3to make the craft.
+  
+  # When console tries to run a command that needs a player.
+  commandErrorPlayerRequired:
+  - §cA player is required!
+  
+  # When creative mode is required.
+  commandErrorCreativeRequired:
+  - §cYour gamemode must be creative to edit recipes!
+  
+  # When the recipe key format is bad.
+  commandErrorRecipeKeyFormat:
+  - §cThe recipe must be in the format §4namespace:name§c!
+  
+  # When the namespace is bad.
+  commandErrorRecipeKeyNamespace:
+  - §cThe namespace can only contain §flowercase§c, §fnumbers§c, §f_§c, §f-§c, and
+    §f.§c!
+  
+  # When the key is bad.
+  commandErrorRecipeKeyKey:
+  - §cThe key can only contain §flowercase§c, §fnumbers§c, §f_§c, §f-§c, §f.§c, and
+    §f/§c!
+  
+  # When the recipe already exists.
+  commandErrorRecipeExists:
+  - §cThis recipe already exists!
+  
+  # The message that asks the command sender to confirm deletion.
+  # Placeholders: %recipekey% = the recipe key
+  commandConfirmDeletion:
+  - §cAre you sure you want to delete %recipekey%?
+  - §cRun §f/deleterecipe %recipekey% confirm §cto confirm.
+  
+  # When deletion is successful.
+  # Placeholders: %recipekey% = the recipe key
+  commandDeletionSuccess:
+  - §3Deleted §f%recipekey%§3.
+  
+  # When the recipe doesn't exist.
+  # Placeholders: %recipekey% = the recipe key
+  commandErrorRecipeNotExist:
+  - §cRecipe §f%s §cdoes not exist.
+  
+  # When inventory is closed before discarding or saving.
+  inventoryCloseTooEarly:
+  - §cDiscard or save your changes first!
+  
+  # When recipes are auto-unlocked on join.
+  # Placeholders: %counter% = the number of recipes unlocked
+  notifyAutoUnlockOnJoin:
+  - §a[Great§bCrafts] §f%counter% §3new recipes were unlocked!
+  
+  # When recipes are auto-unlocked when the player has each item.
+  notifyAutoUnlockEach:
+  - §a[Great§bCrafts] §3You have all the ingredients used in a new recipe! Check the
+    recipe book for more!
+  
+  # When recipes are auto-unlocked when the player has at least one item.
+  notifyAutoUnlockOne:
+  - §a[Great§bCrafts] §3You picked up an item used in a new recipe! Check the recipe
+    book for more!
+  
+  # When in /recipes there are none.
+  commandErrorRecipeListEmpty:
+  - §3There are no recipes! Add one with §b/addrecipe§3.
+  
+  # When nothing matches the search in /recipes.
+  commandErrorRecipeListNothingMatches:
+  - §3No recipes match with that search!
+  
+  # Same as the error when the recipe already exists but specifically for /gcutil duplicaterecipe.
+  commandErrorDuplicationRecipeExists:
+  - §cThe target recipe you're trying to copy to already exists!
+  
+  # When the item in your hand has no item meta (for /gcutil).
+  commandErrorNoItemMeta:
+  - §cNothing in your hand, or the thing in your hand can't be edited!
+  
+  # When successfully set custom name.
+  commandCustomNameSuccess:
+  - §3Set your item's name.
+  
+  # When the lore line trying to be edited is more than the total lines.
+  # Placeholders: %currentsize% = current lore size
+  commandErrorLoreLineTooBig:
+  - §cDid you make a typo? The lore is currently only §f%currentsize%§c lines long.
+  
+  # When successfully set lore line.
+  commandLoreLineSuccess:
+  - §3Set your item's lore.
+  
+  # When lore is empty and can't be deleted.
+  commandErrorNoLoreToDelete:
+  - §cNo lore to delete!
+  
+  # When successfully deleted lore line.
+  commandLoreDeleteSuccess:
+  - §3Deleted your item's lore lines.
+  
+  # When successfully removed enchantment.
+  commandRemoveEnchantSuccess:
+  - §3Successfully removed enchantment.
+  
+  # When successfully added enchantment.
+  commandAddEnchantSuccess:
+  - §3Successfully added enchantment.
+  
+  # When successfully duplicated recipe.
+  # Placeholders: %source% = source recipe key
+  #               %target% = target recipe key
+  commandDuplicationSuccess:
+  - §3Copied §f%source% §3to §f%target%§3.
+

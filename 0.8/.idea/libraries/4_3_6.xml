@@ -1,0 +1,10 @@
+<component name="libraryTable">
+  <library name="4.3.6">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/plugins/GravesX/lib/net/kyori/adventure-platform-facet/4.3.3/adventure-platform-facet-4.3.3.jar-relocated-1226089830.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins/GravesX/lib/net/kyori/adventure-platform-facet/4.3.3/adventure-platform-facet-4.3.3.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

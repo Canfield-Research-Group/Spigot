@@ -1,0 +1,7 @@
+# This is the configuration file for DrSleep
+
+language-file: lang-en.yml
+enable-bstats: true
+time-format: yyyy-MM-dd HH:mm:ss z
+clear-list-daily: true
+debug: false

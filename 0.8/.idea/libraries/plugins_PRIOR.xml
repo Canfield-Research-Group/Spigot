@@ -1,0 +1,42 @@
+<component name="libraryTable">
+  <library name="plugins.PRIOR">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/Tweakin-6.0.4.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/WhatIsThis-5.3.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/FastChunkPregenerator-2.0.9-SNAPSHOT.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/CustomRecipeAPI-1.6.0.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/BetterFarming-5.8.1.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/Advanced-Portals-0.9.3.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/eternallight-1.8.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/LuckPerms-Bukkit-5.4.102.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/Harbor-1.6.3.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/ChestSort-13.6.5.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/PhantomWorlds-2.0.4.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/DecentHolograms-2.8.5.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/mcMMO.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/PortalGun-1.0.8-SNAPSHOT.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/Denizen-1.2.9-b1799-REL.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/CommandAPI-9.2.0.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/ExpandedEnchants.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/Graves-4.9.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/BuildPortals-2.3.0.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/Vault.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/customcrafting-spigot-4.16.8.3.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/Dynmap-3.7-beta-2-spigot.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/PluginManager.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/AutomatedCrafting-2.6.2.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/ColorPortals.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/SimplePortals-1.7.4.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/WildChests-2023.3.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/wolfyutils-spigot-4.16.14.1.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/Nova-0.15-alpha.8.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/VeinMiner-Bukkit-2.1.1.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/waypoints-4.3.2.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/farmingupgrade-1.6.0.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/VillagerFollow-1.5.8.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/ProtocolLib-dev-673.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

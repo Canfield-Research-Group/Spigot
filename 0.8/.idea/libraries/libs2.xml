@@ -1,0 +1,57 @@
+<component name="libraryTable">
+  <library name="libs2">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/LuckPerms/libs/commodore-1.11-remapped.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/LuckPerms/libs/h2-driver-1.4.199.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/LuckPerms/libs/adventure-4.13.0-remapped.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/LuckPerms/libs/adventure-platform-bukkit-4.11.1-remapped.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/LuckPerms/libs/adventure-platform-bukkit-4.11.1.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/LuckPerms/libs/adventure-4.13.0.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/LuckPerms/libs/commodore-1.13-remapped.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/LuckPerms/libs/okhttp-3.14.9-remapped.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/LuckPerms/libs/adventure-platform-4.11.1-remapped.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/LuckPerms/libs/commodore-2.0.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/LuckPerms/libs/caffeine-2.9.0-remapped.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/LuckPerms/libs/commodore-2.2-remapped.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/LuckPerms/libs/commodore-2.0-remapped.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/LuckPerms/libs/adventure-platform-bukkit-4.11.2.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/LuckPerms/libs/commodore-1.13.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/LuckPerms/libs/okio-1.17.5-remapped.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/LuckPerms/libs/adventure-platform-4.9.4.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/LuckPerms/libs/adventure-platform-bukkit-4.13.0-remapped.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/LuckPerms/libs/adventure-4.11.0-remapped.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/LuckPerms/libs/asm-9.1.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/LuckPerms/libs/caffeine-2.9.0.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/LuckPerms/libs/adventure-platform-4.11.2.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/LuckPerms/libs/commodore-1.11.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/LuckPerms/libs/asm-commons-9.1.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/LuckPerms/libs/okhttp-3.14.9.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/LuckPerms/libs/commodore-file-1.0.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/LuckPerms/libs/adventure-platform-bukkit-4.11.2-remapped.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/LuckPerms/libs/adventure-platform-4.11.1.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/LuckPerms/libs/bytebuddy-1.10.22.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/LuckPerms/libs/adventure-platform-bukkit-4.13.0.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/LuckPerms/libs/okio-1.17.5.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/LuckPerms/libs/commodore-file-1.0-remapped.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/LuckPerms/libs/event-3.0.0-remapped.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/LuckPerms/libs/adventure-4.11.0.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/LuckPerms/libs/jar-relocator-1.4.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/LuckPerms/libs/h2-driver-legacy-1.4.199.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/LuckPerms/libs/adventure-platform-4.9.4-remapped.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/LuckPerms/libs/adventure-platform-bukkit-4.9.4.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/LuckPerms/libs/event-3.0.0.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/LuckPerms/libs/adventure-platform-4.11.2-remapped.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/LuckPerms/libs/jar-relocator-1.7.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/LuckPerms/libs/adventure-4.9.4-remapped.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/LuckPerms/libs/adventure-platform-4.13.0-remapped.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/LuckPerms/libs/commodore-2.2.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/LuckPerms/libs/bytebuddy-1.10.22-remapped.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/LuckPerms/libs/adventure-platform-bukkit-4.9.4-remapped.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/LuckPerms/libs/adventure-4.9.4.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/LuckPerms/libs/adventure-platform-4.13.0.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/LuckPerms/libs/h2-driver-2.1.214.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

@@ -1,0 +1,54 @@
+update-notifications: true
+scanner:
+  spherical: true
+  radius: 4
+  height: 3
+update-rate: 20
+default-mode: SPAWNABLE
+messages:
+  enabled: true
+  use-prefix: true
+  prefix: '&e&l[EternalLight] &f'
+  activate: '&aEnabled&f the light level projector. &7Use /ll mode to toggle between
+    display modes.'
+  deactivate: '&cDisabled&f light level projector.'
+  change-mode: Set display mode to &7%mode%
+  no-permission: '&cYou do not have permission to do this!'
+  invalid-mode: '&cInvalid display mode!'
+  invalid-target: '&cNo entity was found by that name. Tye /lightlevels targetlist
+    for a list'
+  set-target: Set target to &7%target%
+lightlevels:
+  overworld: 0
+  nether: 11
+  end: 11
+  legacy:
+    overworld: 7
+    nether: 11
+    end: 0
+mobs:
+  overworld:
+  - zombie
+  - zombie_villager
+  - drowned
+  - husk
+  - stray
+  - witch
+  - creeper
+  - slime
+  - spider
+  - skeleton
+  - enderman
+  nether:
+  - magma_cube
+  - blaze
+  - ghast
+  - hoglin
+  - piglin
+  - zombified_piglin
+  - piglin_brute
+  - enderman
+  - wither_skeleton:
+      nether: 7
+  end:
+  - enderman

@@ -1,0 +1,16 @@
+Categorys:
+  default:
+    category:
+      category_item:
+        ==: org.bukkit.inventory.ItemStack
+        v: 4189
+        type: CRAFTING_TABLE
+        meta:
+          ==: ItemMeta
+          meta-type: UNSPECIFIC
+          display-name: '{"text":"","extra":[{"text":"Category:","strikethrough":false,"obfuscated":false,"bold":false,"italic":false,"underlined":false,"color":"green"},{"text":"
+            [display_name]","italic":false,"color":"dark_aqua"}]}'
+          lore:
+          - '{"text":"","extra":[{"text":"Leftclick to open","strikethrough":false,"obfuscated":false,"bold":false,"italic":false,"underlined":false,"color":"white"}]}'
+          - '{"text":"","extra":[{"text":"Rightclick to edit Category","strikethrough":false,"obfuscated":false,"bold":false,"italic":false,"underlined":false,"color":"white"}]}'
+      name: default

@@ -1,0 +1,10 @@
+<component name="libraryTable">
+  <library name="1.0.0">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/plugins/GravesX/lib/net/kyori/option/1.0.0/option-1.0.0.jar-relocated-1226089830.jar!/" />
+      <root url="jar://$PROJECT_DIR$/plugins/GravesX/lib/net/kyori/option/1.0.0/option-1.0.0.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

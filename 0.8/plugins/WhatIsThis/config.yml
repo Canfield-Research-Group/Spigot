@@ -1,0 +1,159 @@
+# ############################################################### #
+#                  WhatIsThis configuration file                  #
+#                                                                 #
+# Identify blocks and entities by looking at them, using a        #
+# command or by right-clicking with an item.                      #
+#                                                                 #
+# Setting "auto_display: true" will display the information       #
+# simply by targeting the block or entity.                        #
+#                                                                 #
+# The block/entity information will be displayed in the client    #
+# language provided the corresponding language file has been      #
+# loaded by the plugin.                                           #
+#                                                                 #
+# Common blocks can be skipped by adding their names to the       #
+# "IgnoreBlocks" list.                                            #
+# Common entities can be skipped by adding their names to the     #
+# "IgnoreEntities" list.                                          #
+#                                                                 #
+# Author: steve4744                                               #
+# ############################################################### #
+
+# Check for new version on SpigotMC.
+check_for_update: true
+
+# Allow right-click with item. Set the item to AIR to use empty hand.
+use_right_click:
+  enabled: true
+  item: STICK
+
+# Translatable text - change the word "Drops" into your desired language.
+# This only applies to the 'scoreboard' and 'chat' display methods.
+text:
+  drops: Drops
+
+# To enable the loading of specific languages only, add them to a list as follows:
+# LoadLanguage: [en_us, es_es, cy_gb]
+# Or
+# LoadLanguage:
+# - en_us
+# - es_es
+# - cy_gb
+# If you want to load all the languages, add "all" to the list:
+LoadLanguage:
+- all
+
+# Enable only if you want to use the placeholders.
+PlaceholderAPI:
+  enabled: false
+
+# Enable only if you want to use the custom.yml file.
+CustomData:
+  enabled: false
+
+# Enable only if you want to display the content of an item frame
+ItemFrame:
+  display_content: false
+
+# Enable only if you want to display the growth percentage of crops
+Crops:
+  display_growth: false
+
+# Enable only if you want to display the facing direction and open state of trapdoors.
+Trapdoor:
+  display_state: false
+
+# Choose the method(s) to display the block/entity info by enabling the preferred option(s).
+# If the method is enabled and 'on_sneak' is also true, the info is only displayed if
+# the player is 'sneaking' (holding down the Shift key).
+# The prefix and actionbar text can be coloured using any of the following formats:
+#    textcolor: yellow
+#    textcolor: '&b&l'
+#    textcolor: <#ff00ff>
+Display:
+  # If auto_display is true the name will be displayed simply by looking at the block or entity.
+  # RC: auto_display: false ==> TRUE
+  auto_display: true
+  # If enabled is true the custom block name will be prefixed by the name of the plugin providing the custom block.
+  # Each plugin can have a different coloured prefix by specifying a prefix separately as in the examples below.
+  # prefix_custom_blocks:
+  #  enabled: true
+  #  prefix: '&7[&f{PREFIX}&7] '
+  #  Slimefun: '&7[<#ff00ff>{PREFIX}&7] '
+  #  MythicMobs: '&7[&bMM&7] '
+  prefix_custom_blocks:
+    enabled: true
+    prefix: '&7[&f{PREFIX}&7] '
+  scoreboard:
+    enabled: true
+    on_sneak: false
+    # Maximum number of ticks that scoreboard remains visible (default 60 = 3 seconds)
+    timeout: 60
+  actionbar:
+    enabled: true
+    on_sneak: false
+    textcolor: GREEN
+  bossbar:
+    enabled: false
+    on_sneak: false
+    textcolor: WHITE
+    # For available bar colors see https://hub.spigotmc.org/javadocs/spigot/org/bukkit/boss/BarColor.html
+    barcolor: GREEN
+    # Maximum number of ticks that bossbar remains visible (default 60 = 3 seconds)
+    timeout: 60
+    # Style refers to the number of segments the bar is divided into. Valid options are 1, 6, 10, 12 and 20.
+    style: 1
+  chat:
+    enabled: false
+    on_sneak: false
+    name_color: GREEN
+    drop_color: RED
+    show_drops: true
+# For available chat colors see https://hub.spigotmc.org/javadocs/spigot/org/bukkit/ChatColor.html
+
+# List of worlds where the plugin should be disabled.
+# BlacklistedWorlds:
+# - world
+BlacklistedWorlds: []
+
+# If you have custom block or entity plugins installed that you want this plugin to ignore,
+# for example Nova now has its own version of WAILA, set the plugin name here.
+# IgnorePlugins:
+# -Nova
+IgnorePlugins: []
+
+# List of common blocks that will be ignored by the plugin.
+# If you want to ignore all blocks, add "all" to the list.
+# IgnoreBlocks:
+# - AIR
+# - GRASS_BLOCK
+
+IgnoreBlocks:
+- AIR
+- CAVE_AIR
+- WATER
+- GRASS_BLOCK
+- NETHERRACK
+
+# List of common entities that will be ignored by the plugin.
+# If you want to ignore all entities, add "all" to the list.
+# IgnoreEntities:
+# - COW
+# - ARMOUR_STAND
+
+IgnoreEntities:
+- COW
+- PIG
+- CHICKEN
+
+# List of custom blocks and entities that will be ignored by the plugin.
+# Ignore:
+#  Slimefun:
+#  - Ancient Altar
+#  Nova: []
+#  Nexo: []
+#  ItemsAdder: []
+#  MythicMobs:
+#  - Skeleton King
+#
+Ignore: []

@@ -1,0 +1,9 @@
+<component name="libraryTable">
+  <library name="jar-relocator-1.5">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/plugins.PRIOR/PortalGun/lib/me/lucko/jar-relocator/1.5/jar-relocator-1.5.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

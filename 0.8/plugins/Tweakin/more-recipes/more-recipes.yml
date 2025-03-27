@@ -1,0 +1,56 @@
+back-to-blocks-slab-edition: false
+back-to-blocks-stair-edition: false
+easy-dispenser: false
+easy-repeater: false
+easy-minecarts: false
+compact-recipes: false
+compact-shulker-box-recipe: false
+easy-stone-tools: false
+more-stonecutter-recipes: false
+rotten-flesh-to-leather: false
+black-dye-recipe-coal-edition: false
+black-dye-recipe-charcoal-edition: false
+concrete-powder-to-glass: false
+craftable-horse-armor: false
+craftable-coral-blocks-two-by-two: false
+craftable-coral-blocks-three-by-three: false
+more-blocks:
+  enabled: false
+  block-types:
+    trapdoor: 12
+    bark: 4
+    stairs: 8
+    bricks: 4
+universal-dyeing:
+  wool:
+    single: false
+    sorounded: false
+  concrete:
+    single: false
+    sorounded: false
+  concrete_powder:
+    single: false
+    sorounded: false
+  terracotta:
+    single: false
+    sorounded: false
+  stained_glass:
+    single: false
+    sorounded: false
+  bed:
+    single: false
+    sorounded: false
+  stained_glass_pane:
+    single: false
+    sorounded: false
+  carpet:
+    single: false
+    sorounded: false
+  candle:
+    single: false
+    sorounded: false
+
+
+
+
+
