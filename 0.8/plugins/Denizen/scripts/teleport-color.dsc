@@ -18,12 +18,17 @@ teleporter_script:
 
     # Track copper + carpet placement
     on player places *_carpet:
-    - if <proc[is_base_block].context[<context.location.below.material>]>:
-        - run add_teleporter def:<player>|<context.location>
+      - if <proc[is_base_block].context[<context.location.below.material>]>:
+          - run add_teleporter def:<player>|<context.location>
 
     on player breaks *_carpet:
-    - if <proc[is_base_block].context[<context.location.below.material>]>:
-      - run remove_teleporter def:<player>|<context.location>|<context.material.name>
+      - if <proc[is_base_block].context[<context.location.below.material>]>:
+        # The tilde (~) allows the run in the same queue which allows the CANCEL via determine to be propogated to the orihiona event
+        - ~run remove_teleporter def:<player>|<context.location>|<context.material.name>
+        - debug debug "**** Flag result: <player.flag[teleport_delete]||0>"
+        - if <player.flag[teleport_delete]||0> == 0:
+          - determine cancelled
+
 
     # Detect sneaking on teleporter
     on player starts sneaking:
@@ -64,19 +69,44 @@ add_teleporter:
     - define data_map <map[loc=<[loc]>;created=<[created]>;owner=<player.name>]>
     - flag <[player]> teleporters.<[color]>.<[loc_key]>:<[data_map]>
 
-    - narrate "<green>Teleporter added: <[color]>" targets:<[player]>
+    - narrate "<green>Teleporter added: <[color]> for <[player].name>"
 
 
-# Remove teleporter from player storage
 remove_teleporter:
   type: task
   debug: false
   definitions: player|loc|color
   script:
+    # WARNING: Call via '~run' to allow cancel to get passed back to event
     - define loc_key <[loc].simple>
     - define path teleporters.<[color]>.<[loc_key]>
-    - flag <[player]> <[path]>:!
-    - narrate "<yellow>Teleporter removed: <[color]>" targets:<[player]>
+    - define owner null
+
+    # It is most common that the current player is the owner but that adds a number of more lines
+    # and the modest performance gain is not worth it for a seldom used operation
+    - define all_players <proc[get_all_players]>
+    - foreach <[all_players]> as:check:
+      - if <[check].has_flag[<[path]>]>:
+          - define owner <[check]>
+          - foreach stop
+
+    # This check is a PAIN in the ass because Denizen parser is HORRID
+    - define allow_removal false
+    - if <[owner]> == null:
+      - narrate "<red>No teleporter found at this location."
+    - else if <[owner].name.to_lowercase> == <[player].name.to_lowercase> || <player.is_op>:
+      - define allow_removal true
+    - else:
+      - narrate "<red>Teleport cannot be deleted by you <[player].name>, check with owner <[owner].name>"
+
+    - if <[allow_removal]>:
+      # Step 3: Delete from owner's flags
+      - flag player teleport_delete:1
+      - narrate "<yellow>Teleporter removed: <[color]> (owner: <[owner].name>)"
+    - else:
+      - flag player teleport_delete:0 duration:1s
+      - determine cancelled
+
 
 
 # Begin crouch detection
@@ -139,13 +169,13 @@ do_teleport:
             - if <[next]> == null || <[teleporter_current]> < <[next].get[created]>:
                 - define next <[item]>
 
-    # identify where to go
+    # identify where to go, this shoudl always find a match since we checked for more than 1 teleporter abobe
     - if <[next]> !=  null:
       - define found <[next]>
     - else if <[first]> !=  null:
       - define found <[first]>
     - else:
-        - narrate "<gold>No teleporer identitied, possible bug."
+        - narrate "<gold>Cnnot find another teleporer inc olor group, possible bug."
         - stop
 
     # Find next teleport target (with wraparound)
@@ -192,16 +222,19 @@ get_all_players:
 teleport_color_commands:
   type: command
   name: teleport-color
-  debug: debug
+  debug: false
   description: Manages teleport color teleporters
   usage: /teleport-color [clear | list] [color|all] [player (OP only)]
   tab complete:
     - define sub <context.args.get[1]||null>
     - if <[sub]> == null:
-        - determine <list[clear|list]>
+        - determine <list[clear|list|assign]>
     - if <[sub]> == "clear" || <[sub]> == "list":
         - define colors <player.flag[teleporters].keys||list[]>
         - define suggestions <[colors].parse[].include[all]>
+        - determine <[suggestions]>
+    - if <[sub]> == "assign":
+        - define suggestions <>
         - determine <[suggestions]>
     - determine <list[]>
 
@@ -258,9 +291,70 @@ teleport_color_commands:
         - if <[locs].is_empty>:
             - narrate "<red>No teleport locations saved under: <[color]>." targets:<player>
             - stop
-        - narrate "<green>Teleporters for color <[color]> (<[target].name]>):" targets:<player>
+        - narrate "<green>Teleporters for color <[color]> (<[target].name>):" targets:<player>
         - foreach <[locs]>:
             - narrate " - <[value]>" targets:<player>
+        - stop
+
+    # === ASSIGN MODE ===
+    # Handles multi-assignment reapirs by only keeper assigne duser and remove from all others
+    - if <[sub]> == "assign":
+        - if !<player.is_op>:
+            - narrate "<red>You must be an OP to use this command." targets:<player>
+            - stop
+        - if <context.args.size> < 2:
+            - narrate "<red>Usage: /teleport-color assign <player>" targets:<player>
+            - stop
+
+        # Determine new owner
+        - define new_owner_name <context.args.get[2]>
+        - define new_owner <server.match_offline_player[<[new_owner_name]>]>
+        - if <[new_owner]> == -1:
+            - narrate "<red>Player '<[new_owner_name]>' not found." targets:<player>
+            - stop
+
+        # Check if this looks like a teleporter
+        - define loc <player.location.block>
+        - define mat <[loc].material.name>
+        - if !(<[mat].ends_with[_carpet]> && <proc[is_base_block].context[<[loc].below.material>]>):
+          - narrate "<red>Player is not standing on a teleporter."
+          - stop
+
+        # Find telepoeter, performance is not an issue here so write easiets code possible
+        - define loc_key <[loc].simple>
+        - define color <[loc].material.name>
+        - define path teleporters.<[color]>.<[loc_key]>
+
+        # Search all players for the current owner
+        - define all_players <proc[get_all_players]>
+        - define old_owner null
+        - foreach <[all_players]> as:check:
+            - if <[check].has_flag[<[path]>]>:
+                # SUppot cleanup code for accidental multi-ownership. That is possible
+                # due to bugs or sometimes using ASSIGN in creative mode
+                - if <[old_owner]> != null:
+                  - flag <[check]> <[path]>:!
+                  - narrate  "<yellow>Teleporter multi-assigned remove duplicate owner: <[check].name>"
+                - else:
+                  - define old_owner <[check]>
+
+        - if <[old_owner]> == null:
+            - narrate "<red>No existing owner found for this teleporter." targets:<player>
+            - stop
+
+        # Copy flag to new owner and remove from old
+        - define data <[old_owner].flag[<[path]>]>
+        - if <[data]> == null:
+            - narrate "<red>Teleporter exists but could not retrieve data. Plrease report bug." targets:<player>
+            - stop
+        - flag <[old_owner]> <[path]>:!
+        # Add telpoter via normal task. Can use three types:
+        #  * def: prefix with '| delimiter: '  def:<[new_owner]>|<[loc]>
+        #  * def.def-name (see task defintions:) def.player:<[new_owner]> def.loc:<[loc]>
+        #     * I like this as it is rather self documenting
+        #  * Or a weird compresse style: https://meta.denizenscript.com/Docs/Search/run
+        - run add_teleporter def.player:<[new_owner]> def.loc:<[loc]>
+        - narrate "<green>Teleporter reassigned to <[new_owner].name>. (was <[old_owner].name>)" targets:<player>
         - stop
 
     # === UNKNOWN SUBCOMMAND ===
