@@ -25,7 +25,6 @@ teleporter_script:
       - if <proc[is_base_block].context[<context.location.below.material>]>:
         # The tilde (~) allows the run in the same queue which allows the CANCEL via determine to be propogated to the orihiona event
         - ~run remove_teleporter def:<player>|<context.location>|<context.material.name>
-        - debug debug "**** Flag result: <player.flag[teleport_delete]||0>"
         - if <player.flag[teleport_delete]||0> == 0:
           - determine cancelled
 
@@ -93,7 +92,11 @@ remove_teleporter:
     # This check is a PAIN in the ass because Denizen parser is HORRID
     - define allow_removal false
     - if <[owner]> == null:
-      - narrate "<red>No teleporter found at this location."
+      - narrate "<red>Teleport structure detected but not not in list; allowing it to break"
+      # This is an exception allow it to break normally (no flag changes)
+      - flag player teleport_delete:1
+      - determine cancelled
+      - stop
     - else if <[owner].name.to_lowercase> == <[player].name.to_lowercase> || <player.is_op>:
       - define allow_removal true
     - else:
@@ -101,6 +104,7 @@ remove_teleporter:
 
     - if <[allow_removal]>:
       # Step 3: Delete from owner's flags
+      - flag <[owner]> <[path]>:!
       - flag player teleport_delete:1
       - narrate "<yellow>Teleporter removed: <[color]> (owner: <[owner].name>)"
     - else:
@@ -158,16 +162,22 @@ do_teleport:
 
     - foreach <[map].keys> as:key:
         - define item <[map].get[<[key]>]>
-        - define teleporter_current <[item].get[created]>
+        - define found_loc <[item].get[loc]>
+        # Remove and skip teleporters that are broken (often from a deleted world or bug/development)
+        - define is_valid <proc[teleport_exists].context[<[found_loc]>]>
+        - if <[is_valid]>:
+          - define teleporter_current <[item].get[created]>
+          # Track lowest for firtst
+          - if <[first]> == null || <[teleporter_current]> < <[first].get[created]>:
+              - define first <[item]>
 
-        # Track lowest for firtst
-        - if <[first]> == null || <[teleporter_current]> < <[first].get[created]>:
-            - define first <[item]>
-
-        # Track nearest higher (wraps)
-        - if <[teleporter_current]> > <[current_created]>:
-            - if <[next]> == null || <[teleporter_current]> < <[next].get[created]>:
-                - define next <[item]>
+          # Track nearest higher (wraps)
+          - if <[teleporter_current]> > <[current_created]>:
+              - if <[next]> == null || <[teleporter_current]> <[next].get[created]>:
+                  - define next <[item]>
+        - else:
+          - narrate "<gold>Found broken teleport, removed and skipping: <[found_loc]>"
+          - flag <[owner]> teleporters.<[color]>.<[key]>:!
 
     # identify where to go, this shoudl always find a match since we checked for more than 1 teleporter abobe
     - if <[next]> !=  null:
@@ -175,7 +185,7 @@ do_teleport:
     - else if <[first]> !=  null:
       - define found <[first]>
     - else:
-        - narrate "<gold>Cnnot find another teleporer inc olor group, possible bug."
+        - narrate "<gold>Cannot find another teleporer in color group. Posisbly due to cleanup of broken teleporters."
         - stop
 
     # Find next teleport target (with wraparound)
@@ -184,7 +194,6 @@ do_teleport:
     # Teleport and show effect
     - teleport <[player]> <[next_loc].add[0,1,0]>
     - playeffect <[next_loc].add[0,1,0]> effect:ender_signal visibility:50
-
 
 is_base_block:
   type: procedure
@@ -218,23 +227,46 @@ get_all_players:
   - determine <[all_players]>
 
 
+# usage:
+#
+teleport_exists:
+  type: procedure
+  debug: false
+  definitions: loc
+  script:
+    - define world <[loc].world>
+    # TIP: Checking for is_loaded is NOT always going to work since the world may never have been loaded
+    # BUT MInecraft always loads base worlds and IF we force Phantomworld to auto load it's worlds
+    # then is_loaded  will work. Otherwise things get a lot more complex with file checking and
+    # force loading worlds since Denizen cannot access files OUTSIDE Denizen folder!!!
+    - if !<server.worlds.contains[<[world]>]>:
+        - determine false
+    - define chunk <[loc].chunk>
+    - if !<[chunk].is_loaded>:
+        - chunkload <[chunk]>
+    - if !<[loc].material.name.ends_with[_carpet]>:
+        - determine false
+    - determine true
+
+
+
 # *** COMMANDS
 teleport_color_commands:
   type: command
   name: teleport-color
   debug: false
   description: Manages teleport color teleporters
-  usage: /teleport-color [clear | list] [color|all] [player (OP only)]
+  usage: /teleport-color [clear | list | assign | repair ] [color|all] [player (OP only)]
   tab complete:
     - define sub <context.args.get[1]||null>
     - if <[sub]> == null:
-        - determine <list[clear|list|assign]>
+        - determine <list[clear|list|assign|repair]>
     - if <[sub]> == "clear" || <[sub]> == "list":
         - define colors <player.flag[teleporters].keys||list[]>
         - define suggestions <[colors].parse[].include[all]>
         - determine <[suggestions]>
     - if <[sub]> == "assign":
-        - define suggestions <>
+        - define suggestions <list[]>
         - determine <[suggestions]>
     - determine <list[]>
 
@@ -294,6 +326,30 @@ teleport_color_commands:
         - narrate "<green>Teleporters for color <[color]> (<[target].name>):" targets:<player>
         - foreach <[locs]>:
             - narrate " - <[value]>" targets:<player>
+        - stop
+
+
+    # Removes teleporters that are no longer present
+    # === Repair MODE ===
+    - if <[sub]> == "repair":
+        - if !<player.is_op>:
+            - narrate "<red>You must be an OP to use REPAIR command." targets:<player>
+            - stop
+
+        - define all_players <proc[get_all_players]>
+        - foreach <[all_players]> as:owner:
+          - define check_locs <[owner].flag[teleporters]||map[]>
+          # Suppot cleanup code for accidental multi-ownership. That is possible
+          # due to bugs or sometimes using ASSIGN in creative mode
+          - foreach <[check_locs]> key:color as:items:
+            - foreach <[items]> key:loc_simple as:item:
+              - define is_valid <proc[teleport_exists].context[<[item].get[loc]>]>
+              - if <[is_valid]>:
+                - narrate "<green>Keeping found teleport: Owner: <[owner].name>, Color: <[color]>, Loc: <[loc_simple]>"
+              - else:
+                - flag <[owner]> teleporters.<[color]>.<[loc_simple]>:!
+                - narrate  "<red>Removing lost teleport: Owner: <[owner].name>, Color: <[color]>, Loc: <[loc_simple]>"
+
         - stop
 
     # === ASSIGN MODE ===
