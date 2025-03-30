@@ -61,24 +61,24 @@ bed_enable_chunkloader_all:
   script:
     - define all_players <proc[get_all_players]>
     - foreach <[all_players]> as:owner:
-        - run bed_enable_chunkloader_for_player context:<player>
-    # Auto repair
-    - run bed_enable_chunkloader_all delay:5m
+        - run bed_enable_chunkloader_for_player context:<[owner]>
+    # Auto repair - just in case
+    - run bed_enable_chunkloader_all delay:2m
 
 
 # Refresh chunk loading for a specific player
 bed_enable_chunkloader_for_player:
   type: task
   debug: false
-  definitions: player
+  definitions: owner
   script:
     # Block radius around bed (should match default_radius)
-    - define bed_loc <[player].bed_spawn>
+    - define bed_loc <[owner].bed_spawn>
     - if <[bed_loc]||null> == null:
         - stop
 
     # Make sure old spawn is removed
-    - run bed_disable_chunkloader_for_player context:<player>
+    - run bed_disable_chunkloader_for_player context:<[owner]>
 
     - define center_chunk <[bed_loc].chunk>
     - define chunk_radius <proc[bed_chunk_constants].context[chunk_radius]>
@@ -95,10 +95,13 @@ bed_enable_chunkloader_for_player:
             - define block_loc <location[<[cx].mul[16]>,64,<[cz].mul[16]>,<[world]>]>
             - define chunk_loc <[block_loc].chunk>
             - if !<[chunk_loc].is_loaded>:
-                - chunkload <[chunk_loc]>
+                # 0 is supposed to be forever, but experiments indicate that may not be correct. Do NOT make forever
+                # in any case in case  of bug, 1 day or so shuld be plenty. Acually just a short period longer
+                # than refresh. But be safe.
+                - chunkload <[chunk_loc]> duration:1d
             - define loaded_chunks <[loaded_chunks].include[<[chunk_loc]>]>
 
-    - flag <[player]> bed_chunks:<[loaded_chunks]>
+    - flag <[owner]> bed_chunks:<[loaded_chunks]>
 
 
 # Disable chunks for player
@@ -153,9 +156,15 @@ bedchunks_show_cmd:
     - if <[chunks].is_empty>:
         - narrate "<gold>No spawn chunks identified. Do you have a bed?"
     - else:
+        - define loaded 0
         - define first_chunk <[chunks].get[1]>
         - define last_chunk <[chunks].get[<[chunks].size>]>
+        - foreach <[chunks]> as:chunk:
+            - if <[chunk].is_loaded>:
+                - define loaded <[loaded].add[1]>
+
         - narrate "<green>Player bed chunks:"
         - narrate "  <green>First: <yellow><[first_chunk].simple>"
         - narrate "  <green>Last: <yellow><[last_chunk].simple>"
         - narrate "  <green>Total: <yellow><[chunks].size> chunks"
+        - narrate "  <green>Total: <yellow><[loaded]> loaded"
