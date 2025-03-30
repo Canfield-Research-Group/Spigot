@@ -24,11 +24,13 @@ PluralizeCount:
 # *
 # ****************
 scanForItems:
-    debug: false
+    debug: true
     type: task
     # Tip: The MAP must be done last, otherwise the following '|' option seems to modify the map and breaks it
     #   matrix : MAP keyed by off hand element name, then the keys
-    definitions: matrix|dry_run
+    #   dry-run: Optional but if TRUE then enables a info only message (no block scan) to indicate costs and detected tool attributes
+    #   loc: (optional) The context of the block hit, used for fix of items in bedrock
+    definitions: matrix|dry_run|struck_loc
     script:
         # in  case the scan peformed is still set
         - flag <player> scan_performed:!
@@ -42,7 +44,6 @@ scanForItems:
         - else:
             # Use tick cooldown, 2t seems generous enough and catches more double events than 1t
             - flag <player> cooldown_scanner:true expire:2t
-
 
         - define scan_status ok
 
@@ -322,30 +323,65 @@ scanForItems:
         # *****
         # Handle results
         - if <[is_applicable]>:
-            - if <[better_tool_avail]> && !<player.has_flag[better_tool_available]>:
-                - playsound <player.location> sound:ENTITY_GLOW_SQUID_SQUIRT
-                - narrate "- TIP: You may want to use your GOLDEN tool for scanning, stricke again rapidly to force scan."
-                - flag <player> better_tool_available:true expire:10t
+            # Fix (2025) for cases where an item might be trapped in unreakble blocks which is VERY frustrating foe the player. This
+            # happens most often for diamonds in bedrock. There are number of potential solutions:
+            #   * scanner could ignore blocks that are unreachable. This can be done by a 6 sided scan for any unbreakable but that
+            #   is not overly reliable, there is still a chance the target block could be trapped. Making the scan even harder/slower
+            #       * Plus tt is really tedious to find items in bedrock, so frustraing users often avoid that area.
+            #   * Destroy the block in the way even if unbreakable
+            #       * BAD idea to break unbreakable blocks
+            #       * Denizen does not allow this, only Creative Mode allows this
+            #   * Retrieve block as if user hit it with the tool
+            #       * For gameplay ignore distance (sine there is no guarentee the user can get within range)
+            #       * Do not require anything beyond sensore durability as that is just tedious. Besides bedrock sucks anyway
+            #       * This is just a cool advanced extra ability ASSUMING user hit the bedrock
+            #       * Not ideal, seems a tad OP so make sure user is facing proper direction?
+            #
+            # Check if current context (the block hit)
+            #
+            # To reduce confusion avoid the GOLD detection check on unbrekablae as this also avoids the requirement for a QUICK STRIKE
+            - if <proc[is_block_unbreakable].context[<[struck_loc]>]> && <[scan_status]> != tool_too_week:
+                - define tool <player.item_in_hand>
+                - define drops <[found_location].drops[<[tool]>]>
+                - if <[drops].is_empty>:
+                    # More help would be nice but very long:
+                    #   Example: Found item in unbreakable area, but current tool cannot mine the detected item. Use a better tool to scan and enable remote mining of the item. Be sure to be in range of the target item when using the new tool."
+                    - narrate "<gold>Hit in unbreakable area, but your tool can't REMOTE mine the found item. Use a stronger tool to scan and remote-mine. Stay in range!"
+                - else:
+                    - foreach <[drops]>:
+                        # Applies to curent user, no need for player
+                        - give <[value]>
+                        - modifyblock <[found_location]> air
+                        - playeffect effect:BLOCK_BREAK <[found_location]> data:<[found_location].material>
+                        - narrate "<gold>Remote mining triggered: Hit on Unbrekable block area detected and block was retrived."
+                        - define scan_durability_triggered true
             - else:
-                # Adjust durability since script reached here and nothing blew up!
+                - if <[better_tool_avail]> && !<player.has_flag[better_tool_available]>:
+                    - playsound <player.location> sound:ENTITY_GLOW_SQUID_SQUIRT
+                    - narrate "- TIP: You may want to use your GOLDEN tool for scanning, stricke again rapidly to force scan using current tool."
+                    - flag <player> better_tool_available:true expire:10t
+                - else:
+                    # Adjust durability since script reached here and nothing blew up!
                     - if <[scan_status]> == tool_too_week:
                         - playsound <player.location> sound:ENTITY_ITEM_BREAK
                         - narrate "WARNING: Tool too weak to scan"
                     - else:
                         - narrate <[scan_result_message]>
+                        - define scan_durability_triggered true
 
-                        - if <player.gamemode> != creative:
-                            # - Must use an inventory item for this - see https://meta.denizenscript.com/Docs/Search/durability
-                            #   - See also hammer script: https://forum.denizenscript.com/resources/hammer-time-incl-resource-pack.104/updates#resource-update-181
-                            - inventory adjust slot:hand durability:<[tool_durability_new]>
+            - if <[scan_durability_triggered]>:
+                - if <player.gamemode> != creative:
+                    # - Must use an inventory item for this - see https://meta.denizenscript.com/Docs/Search/durability
+                    #   - See also hammer script: https://forum.denizenscript.com/resources/hammer-time-incl-resource-pack.104/updates#resource-update-181
+                    - inventory adjust slot:hand durability:<[tool_durability_new]>
 
-                            - if <[found_location]>:
-                                - look <player> <[found_location]>
-                            # clear flag even if it has not expired
-                            - flag <player> better_tool_available!
+                - if <[found_location]>:
+                    - look <player> <[found_location]>
+                # clear flag even if it has not expired
+                - flag <player> better_tool_available!
 
                     # Set flag if scan was OR would have been done so caller can cancel context as needed to allow events to propogate
-                    - flag <player> scan_performed:true
+                - flag <player> scan_performed:true
 
 
 # Scanner help pages
@@ -558,7 +594,9 @@ scan_blocks:
             # Only enable scanning if player is sneaking AND has something in off hand
             - define offhand_name <proc[is_scan_allowed]>
             - if <[offhand_name]>:
-                - ~run scanForItems def.matrix:<script[ScannerTypes].data_key[data.mining]> def.dry_run:false
+                # Task handling needs the location data to handle the new (2025) unbreaking area fix
+                - define loc <context.location>
+                - ~run scanForItems def.matrix:<script[ScannerTypes].data_key[data.mining]> def.dry_run:false def.struck_loc:<[loc]>
                 - if <player.has_flag[scan_performed]>:
                     - if <player.flag[scan_performed]>:
                         - determine cancelled
@@ -579,12 +617,29 @@ scan_creatures:
             - define offhand_name <proc[is_scan_allowed]>
             - if <[offhand_name]>:
                 # Run syncronous and only cancel if scan was done, otherwise allow other actions to run
-                - ~run scanForItems def.matrix:<script[ScannerTypes].data_key[data.creatures]> def.dry_run:false
+                # Task handling needs (not really needed for sword but be consistent) the location data to handle the new (2025) unbreaking area fix
+                - define loc <context.location>
+                - ~run scanForItems def.matrix:<script[ScannerTypes].data_key[data.creatures]> def.dry_run:false def.struck_loc:<[loc]>
                 - if <player.has_flag[scan_performed]>:
                     - determine cancelled
 
                 - stop
 
+# ***
+# *** Detects if the block at the current location is a listed unbrekable block. THis is not ideal
+# *** but appears the only reliablae way to detect this. We avoid using a tool as we want ALWAYS unbrekable
+# *** not those not unbrekable with current ool.
+# *** It should be good enough for out scanner fix for detecting items in bedrock
+# ***
+is_block_unbreakable:
+  type: procedure
+  definitions: loc
+  script:
+    - define material <[loc].material>
+    - define unbreakables list[bedrock|barrier|end_portal|end_gateway|command_block|structure_block|structure_void]
+    - if <[material]> in <[unbreakables]>:
+        - determine true
+    - determine true
 
 
 # *******************
