@@ -24,7 +24,7 @@ PluralizeCount:
 # *
 # ****************
 scanForItems:
-    debug: true
+    debug: false
     type: task
     # Tip: The MAP must be done last, otherwise the following '|' option seems to modify the map and breaks it
     #   matrix : MAP keyed by off hand element name, then the keys
@@ -46,7 +46,7 @@ scanForItems:
             - flag <player> cooldown_scanner:true expire:2t
 
         - define scan_status ok
-
+        - define scan_performed false
         - define sample <player.item_in_offhand>
         - define sample_name <[sample].material.name>
         - define holding <player.item_in_hand>
@@ -107,17 +107,16 @@ scanForItems:
                 - stop
         - else if <[durability_custom_multiplier]> > 0:
             # EXPERIMENTAL: Use th offhand item as a search filter. The issue is the item held is NOT always obvious.
-            # for example 'wheat' is a BLOCK and fully grown wheet can be found WITH a pickaxe!
+            # for example 'wheat' is a BLOCK and fully grown wheat can be found WITH a pickaxe!
             - if <material[<[sample_name]>].is_block>:
                 - if <[holding].material.name> matches *_sword:
                     - define is_applicable false
                     - define scan_status wrong_tool_pickaxe_required
-            - else:
-                - else if <[holding].material.name> matches *_pickaxe:
-                    # Pretty much anything else is allowed. Unless it is a block (not in the whitelist)
-                    # for example WHEAT is considerd a block but seeds are not
-                    - define is_applicable false
-                    - define scan_status wrong_tool_sword_required
+            - else if <[holding].material.name> matches *_pickaxe:
+                # Pretty much anything else is allowed. Unless it is a block (not in the whitelist)
+                # for example WHEAT is considerd a block but seeds are not
+                - define is_applicable false
+                - define scan_status wrong_tool_sword_required
 
             # If scan sample_name is not in matrix then adjust duability cost by multiplier
             # If everything is OK so far, See if offhand is applicable - no wrning as this action may be done in some other context
@@ -297,17 +296,9 @@ scanForItems:
                 - define t No
                 - define golden_message <empty>
             - narrate " - Using golden tool: <[t]>"
-            - if <material[<[sample_name]>].is_block>:
-                - define t block
-                - if <[holding].material.name> matches *_sword:
-                    - define t "<[t]> (tip: use a pickaxe)"
-            - else:
-                - define t entity
-                - if ! <[holding].material.name> matches *_pickaxe:
-                    - define t "<[t]> (tip: use a sword)"
             - narrate " - Off hand: <[sample_name]> of type <[t]>"
             - if <[better_tool_avail]>:
-                - narrate "- TIP: You may want to use your GOLDEN tool for scanning"
+                - narrate "- TIP: You may want to ue your GOLDEN tool for scanning"
             - if <[is_applicable]>:
                 - narrate " - Will scan for: <[scan_message]>"
                 - narrate " - Scan range: <[scan_range]> spherical redius <[golden_message]>"
@@ -340,6 +331,7 @@ scanForItems:
             # Check if current context (the block hit)
             #
             # To reduce confusion avoid the GOLD detection check on unbrekablae as this also avoids the requirement for a QUICK STRIKE
+            - define is_breakable <proc[is_block_unbreakable].context[<[struck_loc]>]>
             - if <proc[is_block_unbreakable].context[<[struck_loc]>]> && <[scan_status]> != tool_too_week:
                 - define tool <player.item_in_hand>
                 - define drops <[found_location].drops[<[tool]>]>
@@ -354,11 +346,11 @@ scanForItems:
                         - modifyblock <[found_location]> air
                         - playeffect effect:BLOCK_BREAK <[found_location]> data:<[found_location].material>
                         - narrate "<gold>Remote mining triggered: Hit on Unbrekable block area detected and block was retrived."
-                        - define scan_durability_triggered true
+                    - define scan_performed true
             - else:
                 - if <[better_tool_avail]> && !<player.has_flag[better_tool_available]>:
                     - playsound <player.location> sound:ENTITY_GLOW_SQUID_SQUIRT
-                    - narrate "- TIP: You may want to use your GOLDEN tool for scanning, stricke again rapidly to force scan using current tool."
+                    - narrate "- TIP: You may want to use your GOLDEN tool for scanning, strike again rapidly to force scan using current tool."
                     - flag <player> better_tool_available:true expire:10t
                 - else:
                     # Adjust durability since script reached here and nothing blew up!
@@ -367,9 +359,13 @@ scanForItems:
                         - narrate "WARNING: Tool too weak to scan"
                     - else:
                         - narrate <[scan_result_message]>
-                        - define scan_durability_triggered true
+                        - define scan_performed true
 
-            - if <[scan_durability_triggered]>:
+
+            # Final processing, output, flags, and durability
+            # clear flag even if it has not expired
+            - flag <player> better_tool_available!
+            - if <[scan_performed]>:
                 - if <player.gamemode> != creative:
                     # - Must use an inventory item for this - see https://meta.denizenscript.com/Docs/Search/durability
                     #   - See also hammer script: https://forum.denizenscript.com/resources/hammer-time-incl-resource-pack.104/updates#resource-update-181
@@ -377,10 +373,8 @@ scanForItems:
 
                 - if <[found_location]>:
                     - look <player> <[found_location]>
-                # clear flag even if it has not expired
-                - flag <player> better_tool_available!
 
-                    # Set flag if scan was OR would have been done so caller can cancel context as needed to allow events to propogate
+                # Set flag if scan was OR would have been done so caller can cancel context as needed to allow events to propogate
                 - flag <player> scan_performed:true
 
 
@@ -388,7 +382,7 @@ scanForItems:
 #   - simple help screen that hopefully is concise in describing how to use this mod
 scanner_command:
   type: command
-  debug: true
+  debug: false
   name: scanner
   description: Scanner help
   usage: /scanner help [page]
@@ -426,7 +420,13 @@ scannerCommandInfo:
   name: scanner_command_info
   description: Scanner info
   script:
-    - run scanForItems def.matrix:<script[ScannerTypes].data_key[data.mining]> def.dry_run:true
+    - if <player.item_in_hand.material.name> matches *_sword:
+        - ~run scanForItems def.matrix:<script[ScannerTypes].data_key[data.creatures]> def.dry_run:true
+    - else if <player.item_in_hand.material.name> matches *_pickaxe:
+        - ~run scanForItems def.matrix:<script[ScannerTypes].data_key[data.mining]> def.dry_run:true
+    - else:
+        - narrate "<gold>Current tool is not a sword/pickaxe, running info assuming pickaxe"
+        - ~run scanForItems def.matrix:<script[ScannerTypes].data_key[data.mining]> def.dry_run:true
 
 
 # *****************
@@ -639,7 +639,7 @@ is_block_unbreakable:
     - define unbreakables list[bedrock|barrier|end_portal|end_gateway|command_block|structure_block|structure_void]
     - if <[material]> in <[unbreakables]>:
         - determine true
-    - determine true
+    - determine false
 
 
 # *******************
@@ -756,7 +756,7 @@ ScannerTypes:
                     targets:
                         - cow
                         - sheep
-                wheet_seeds:
+                wheat_seeds:
                     message: Chicken
                     targets:
                         - chicken
