@@ -1,11 +1,11 @@
 // file: ore_copper_large.json
-// original count: 16
+// original count: 16, 10
 {
   "feature": "minecraft:ore_copper_large",
   "placement": [
     {
       "type": "minecraft:count",
-      "count": 10
+      "count": 14
     },
     {
       "type": "minecraft:in_square"
