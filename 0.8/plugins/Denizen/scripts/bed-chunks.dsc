@@ -8,7 +8,16 @@ bed_chunk_loader:
     # Startup task to initialize chunk loading for all online players
 
     on server start:
-        - run bed_enable_chunkloader_all
+        - run bed_reload
+
+    on script reload:
+        - run bed_reload
+
+
+    on system time minutely:
+        - define chunk_refresh <proc[bed_chunk_constants].context[chunk_refresh_minutes]>
+        - if <context.minute.mod[<[chunk_refresh]>]> == 0:
+            - run bed_reload
 
     # Trigger on player join to set up initial chunk load
     on player joins:
@@ -40,7 +49,6 @@ bed_chunk_loader:
         - foreach <[all_players]> as:pl:
             - define bed_chunk <[broken_bed].chunk>
             - define pl_chunk <[pl].bed_spawn.chunk>
-            - debug debug "<red>Break : <[bed_chunk]>  --- <[pl_chunk]>"
             - if <[bed_chunk]> == <[pl_chunk]>:
                 - run bed_disable_chunkloader_for_player context:<[pl]>
                 - narrate "<red>Bed at <[pl].name> at <[bed_chunk]> was removed. Chunk loading disabled."
@@ -49,21 +57,38 @@ bed_chunk_loader:
 bed_chunk_constants:
   type: procedure
   definitions: key
+  debug: false
   script:
     - choose <[key]>:
         - case chunk_radius:
             - determine 5
+        - case chunk_refresh_minutes:
+            - determine 2
+        - case chunk_ttl_minutes:
+            # Chunk time to libe shoudl be a least a minute or 2 more than refresh to deal with lag.
+            # Do NOT use really long times as we count on the chunk live (Denizen) to cleanup chunks
+            # to avoid SLOW chunk unload lops in the script.
+            - determine 5
+
+
+# Run bed refresh with an ID to avoid multiple queus running
+bed_reload:
+    type: task
+    debug: false
+    script:
+        - run bed_enable_chunkloader_all id:bed_chunkloader_refresh
 
 
 # Refresh all players spawn chunks
 bed_enable_chunkloader_all:
   type: task
+  debug: false
   script:
     - define all_players <proc[get_all_players]>
     - foreach <[all_players]> as:owner:
         - run bed_enable_chunkloader_for_player context:<[owner]>
-    # Auto repair - just in case
-    - run bed_enable_chunkloader_all delay:2m
+        # Wait 1 tick beteween players
+        - wait 1t
 
 
 # Refresh chunk loading for a specific player
@@ -77,11 +102,12 @@ bed_enable_chunkloader_for_player:
     - if <[bed_loc]||null> == null:
         - stop
 
+    - define start_time <util.current_time_millis>
+    - define trigger_time <[start_time]>
     # Make sure old spawn is removed
-    - run bed_disable_chunkloader_for_player context:<[owner]>
-
     - define center_chunk <[bed_loc].chunk>
     - define chunk_radius <proc[bed_chunk_constants].context[chunk_radius]>
+    - define chunk_ttl <proc[bed_chunk_constants].context[chunk_ttl_minutes]>m
     - define loaded_chunks <list[]>
     - define world <[bed_loc].world.name>
 
@@ -94,19 +120,30 @@ bed_enable_chunkloader_for_player:
             # Oddly enough, Denizen, does NOT allow chunk cordinates to be used to creat a chunk tag, so convert to blocks -- gotta love this mess
             - define block_loc <location[<[cx].mul[16]>,64,<[cz].mul[16]>,<[world]>]>
             - define chunk_loc <[block_loc].chunk>
-            - if !<[chunk_loc].is_loaded>:
-                # 0 is supposed to be forever, but experiments indicate that may not be correct. Do NOT make forever
-                # in any case in case  of bug, 1 day or so shuld be plenty. Acually just a short period longer
-                # than refresh. But be safe.
-                - chunkload <[chunk_loc]> duration:1d
+            # TIP use `if !<[chunk_loc].is_loaded>` is not really needed and did not impact script time
+
+            # Only keep chunks loaded for a bit over the refresh time. This removes the need
+            # to have this tas clean up old chunks which gets a tad complex. It does mean that
+            # it's possible to add/remove many beds to temporarily have a LOT of chunks loaded.
+            #   * Not considered a huge deal for polite players, and if not pllite BAN them
+            #   * TODO: Compare arrays and only remove beds that are in the old list and not new list
+            - chunkload <[chunk_loc]> duration:<[chunk_ttl]>
             - define loaded_chunks <[loaded_chunks].include[<[chunk_loc]>]>
+            - define now_time <util.current_time_millis>
+            # One tick is 20ms so this should limit us to 1 tick (approx) at a time making this a VERY light weight operation
+            # especially as it runs on events and every few minutes
+            - if <[now_time].sub[<[trigger_time]>]> > 1:
+                # Instead of using a count, let's trigger when time is exuaysed
+                - wait 1t
+                - define trigger_time <util.current_time_millis>
 
     - flag <[owner]> bed_chunks:<[loaded_chunks]>
-
+    - define elapsed <util.current_time_millis.sub[<[start_time]>]>
 
 # Disable chunks for player
 bed_disable_chunkloader_for_player:
   type: task
+  debug: false
   definitions: owner
   script:
     # Block radius around bed (should match default_radius)
@@ -123,6 +160,7 @@ bed_disable_chunkloader_for_player:
 # ***
 bedchunks_command:
   type: command
+  debug: false
   name: bedchunks
   usage: /bedchunks [reload|show]
   description: Manage bed chunk loading
@@ -143,14 +181,18 @@ bedchunks_command:
 
     - narrate "<red>Usage: /bedchunks [reload|show]"
 
+
 bedchunks_reload_cmd:
   type: task
+  debug: false
   script:
     - run bed_enable_chunkloader_all
     - narrate "<green>Chunk loading triggered for all players."
 
+
 bedchunks_show_cmd:
   type: task
+  debug: false
   script:
     - define chunks <player.flag[bed_chunks]||list[]>
     - if <[chunks].is_empty>:
