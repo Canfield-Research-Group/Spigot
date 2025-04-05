@@ -22,7 +22,7 @@ PluralizeCount:
 # ****************
 # * General scan for items procedure. Uses a passed matrix and types to locate items
 # *
-# ****************
+# **************
 scanForItems:
     debug: false
     type: task
@@ -91,7 +91,7 @@ scanForItems:
             - stop
 
         # Set default
-        - define is_applicable false
+        - define is_applicable true
         - define scan_targets false
         - define found_location false
 
@@ -106,7 +106,7 @@ scanForItems:
                 - debug ERROR "Scan samples.<[sample_name]> missing key (targets) for "
                 - stop
         - else if <[durability_custom_multiplier]> > 0:
-            # EXPERIMENTAL: Use th offhand item as a search filter. The issue is the item held is NOT always obvious.
+            # EXPERIMENTAL: Use the offhand item as a search filter. The issue is the item held is NOT always obvious.
             # for example 'wheat' is a BLOCK and fully grown wheat can be found WITH a pickaxe!
             - if <material[<[sample_name]>].is_block>:
                 - if <[holding].material.name> matches *_sword:
@@ -145,7 +145,7 @@ scanForItems:
 
         # See if the current item being looked at matches the target, if so skip it (waste of time)
         #   - TIP: .target. works only for entities NOT blocks. And we don't want to use context for damage here
-        #   here as he INFO command does nto require that AND if the player's cursor is on it it should obviously be visible
+        #   here as he INFO command does not require that AND if the player's cursor is on it it should obviously be visible
         - if <player.cursor_on.material.name> matches <[scan_targets_matching]>:
             - define scan_status you_are_looking_at_it
             - define is_applicable false
@@ -635,8 +635,8 @@ is_block_unbreakable:
   type: procedure
   definitions: loc
   script:
-    - define material <[loc].material>
-    - define unbreakables list[bedrock|barrier|end_portal|end_gateway|command_block|structure_block|structure_void]
+    - define material <[loc].material.name>
+    - define unbreakables <list[bedrock|barrier|end_portal|end_gateway|command_block|structure_block|structure_void]>
     - if <[material]> in <[unbreakables]>:
         - determine true
     - determine false
@@ -648,7 +648,7 @@ is_block_unbreakable:
 #       - Usage: <ScriptTag.data_key[<keyname>]>
 #       - <...data_key[blocks]>
 # See: https://meta.denizenscript.com/Docs/Search/script#data%20script%20containers
-# ** 
+# **
 # *******************
 ScannerTypes:
     type: data
