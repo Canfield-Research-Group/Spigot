@@ -47,6 +47,30 @@
 #
 # ------------------------------------------------------------------------------
 
+# TODO: CHANGE the inventory storage
+#   - all flags use the same entry data and there is no duplicates
+#   - a flag for all normal inventory items keyed by ITEM name (same entry data as curently)
+#       - Look up is VERY fast
+#   - a flag for all WILDCARD (advanced_macthes) that use the new sign wildcard and trigger type indexed by location
+#        - A loop but hopefully custom signs are not plentify
+#   - a flag for all feeders indexed by location 
+#       - Again a loop but easy
+#       - Any feeders in unloaded chunks are NOT processed
+#       - Any inventory in unloaded chunks are NOT processed
+#       - always runs if any player are present
+#       - moves a stack at a time 
+#       - these should process one feeder per player so no player is favored
+#       - Hoopers run at 2.5 items second so we have a lot of flexibility to be at least this fast
+#           - sorter runs every tick and operates for 1ms max per, then saves state and waits for 1t
+#           - consider running 1 cycle for all feeders and move a STACK (or whatever fits)
+#           - process nearest chests with same item first, but a partial move due to room is still an event
+#           - if no exact items match/have room process against the SIGN chests
+#           - if none have room process the special '[inv] overflow' chest(s) in nearest order
+#           - Based on total time to move items we may run more than one loop but even at that we will be
+#           - running up to 64 a tick!
+#           - main process will need to tracl state:
+#               - current player name
+#               - current feeder offset (we will assume a per move across multiple chests is in out 2ms range)
 
 
 # TODO: Structure of code to avoid horrible lag
@@ -60,17 +84,7 @@
     #  - Do NOT support interworld inventory or LONG range chaining. Do that the minecraft way. Kepe it simple and clean
 
 
-# TODO Command to clear player flags for inventory
-
 # TODO command to rebuild inventory matrix based on x chunks around player (default is bed-spawn chunks if that flag exists), elase 5 chunks
-
-# TODO intercept sign being attached to hopper of chest (or anything with a simple inventory), AS: name is the name (* = wildcard, ends with)
-    # - Does Denizen have a '*' wildcard for suffix, prefix, etc. OR some way to match: *copper*
-    # - We should be able to support groups: ORE, INGOTS, etc.
-# TODO intercept frame being attached to hopper of chest (or anything with a simple inventory), use item in frame as ITEM
-
-
-# TODO Detect if sign is a PUSH type sign:  AS: PUSH and set flag appropiatley
 
 
 # ***
@@ -159,7 +173,7 @@ sign_or_frame_events:
         - determine cancelled
 
 
-    # === ENTITY (Frame) EDITED ===
+    # === ENTITY (Frame) changes ===
     # use 'item' to amtach any, otherwise specific item name.
     # context
     #   * frame : frame object, eg frame.location
@@ -180,7 +194,7 @@ sign_or_frame_events:
 
         # an auto repair, in case something went wrong, this should not impact performance in any meaningful way
         - run inventory_simple_add_mapping def:<player>|<[details]>
-        - determine cancelled
+
 
     # === (Sign) placed ===
     after player places *_sign:
@@ -221,13 +235,13 @@ inventory_simple_add_mapping:
     - if !<player.has_permission[minecraft.command.op]>:
         - stop
 
-    - define trigger_loc <[data].get[trigger]>
-    - define chest_loc <[data].get[chest]>
-    - define item_filter <[data].get[filter]||na>
-    - define group_filter <[data].get[group]||na>
-    - define is_feeder <[data].get[feeder]||f>
+    - define trigger_loc <[data].get[trigger]||na>
+    - define chest_loc <[data].get[chest]||na>
+    - define filter <[data].get[filter]||na>
+    - define wildcard <[data].get[wildcard]||na>
+    - define type <[data].get[type]||na>
 
-    - if <[trigger_loc]> == null || <[chest_loc]> == null:
+    - if <[trigger_loc]> == na || <[chest_loc]> == na || <[type]> == na >:
         - determine false
 
     # TIP: originally the idea was to shoten locations by dropping world. But that complicates the lookup code
@@ -244,10 +258,21 @@ inventory_simple_add_mapping:
     # Remove the existing flag (if any) and replace with the new one to form an auto-repair
     - define start_time <util.current_time_millis>
 
+    # Remove any existing before adding
     - run inventory_simple_remove_mapping def:<[player]>|<[trigger_loc]>
-    - define flag_path <proc[inventory_simple_flag_path].context[<[trigger_loc]>]>
-    - define entry <map[t=<[trigger_loc].block>;c=<[chest_loc].block>;i=<[item_filter]>;w=<[group_filter]>;f=<[is_feeder]>]>
-    - flag <[player]> <[flag_path]>:->:<[entry]>
+
+    # Build entry, common for all flag groups
+    - define entry <map[t=<[trigger_loc].block>;c=<[chest_loc].block>;f=<[filter]>;w=<[wildcard]>]>
+
+    # Build flag path
+    - define flag_root <proc[inventory_simple_flag_path[<[trigger_loc]>]]>
+    # Items are indexed by name
+    - if <[type]> == target:
+        - if <[wildcard]>:
+            - define flag_path <[flag_root]>.<[filter]>
+            - flag <[player]> <[flag_path]>:->:<[entry]>
+
+    - stop
 
     # == DEBUG
     - define end_time <util.current_time_millis>
@@ -256,19 +281,40 @@ inventory_simple_add_mapping:
     - determine true
 
 
+# ***
+# *** Remove a location key from all indexes
+# ***
 inventory_simple_remove_mapping:
   type: procedure
   definitions: player|trigger_loc
   debug: false
   script:
-    # ==== Tempory OP this for developer
-    - if !<player.has_permission[minecraft.command.op]>:
-        - stop
+    - define world_name <[trigger_loc].world.name>
+    - define search_loc <[trigger_loc].simple>
 
-    - define flag_path <proc[inventory_simple_flag_path].context[<[trigger_loc]>]>
-    - define trigger_key <[trigger_loc].block>
-    - foreach <[player].flag[<[flag_path]>].filter_tag[<[filter_value].get[t].equals[<[trigger_key]>]>]> as:entry:
-        - flag <[player]> <[flag_path]>:<-:<[entry]>
+    # Remove items, these are indexed by name, and location data in in the resulting list
+    - define flag_root <proc[inventory_simple_flag_path[<[trigger_loc]>]]>
+    - define item_names <[player].flag[<[flag_root].keys>]>
+    - debug log "<red>Flag+item: <[item_names]>"
+    - define counter 0
+    - foreach <[item_names]> as:item_name :
+        - define flag_item <[flag_root]>.<[item_name]>
+        - debug log "<red>Flag+item: <[flag_item]>"
+
+        - define found_entries <player.flag[<[flag_item]>].filter_tag[<entry.get[t].equals[<[item_name]>]>]>
+        - foreach <[found_entries]> as:entry :
+            - debug log "<red>REMOVE: [<entry>]"
+            - flag <[player]> <[flag_item]>:<-:<[entry]>
+            - define counter counter.add[1]
+    - determine counter
+
+    # ---- DELETE THE FOLLOWING LINES - for reference
+    - foreach <list[exact|wildcard|feeder]> as:flag_group :
+        - define world_name <[trigger_loc].world.name>
+        - define flag_path <proc[inventory_simple_flag_path].context[<[trigger_loc]>]>
+        - define trigger_key <[trigger_loc].block>
+        - foreach <[player].flag[<[flag_path]>].filter_tag[<[filter_value].get[t].equals[<[trigger_key]>]>]> as:entry:
+            - flag <[player]> <[flag_path]>:<-:<[entry]>
 
 
 
@@ -301,12 +347,10 @@ inventory_simple_frame_details:
     - if <[entity].entity_type> != item_frame:
         - determine <[no_match]>
 
-
     - define data <proc[inventory_simple_frame_change].context[<[player]>|<[entity]>]>
 
     # Return both frame and attached block (normal locations, not simplified)
     - determine <[data]>
-    - stop
 
 
 # ****
@@ -315,8 +359,12 @@ inventory_simple_frame_details:
 # ****
 # **** Called when a frame change occurs, such as item in frame added, removed, rotated
 # ****
-# *** NOTE: Be sure to `wait 1t` before calling this function so rortate is processed, otherwise things get otu of sync
-# *** Unless user 'after' events instead of 'on'
+#
+# The item within the frame is used as an exact item match (without NBT). This is the fastest
+# inventory filter and using frames (or multuiple frames per chest).
+#
+# TIP: An arrow pointing up (use shift right click to rotate) is a FEEDER.
+#
 inventory_simple_frame_change:
   type: procedure
   definitions: player|frame|item
@@ -339,11 +387,9 @@ inventory_simple_frame_change:
     # get item filter, this is easy, it is the item name
     - define item_filter <[item].material.name>
 
-
     - if <[item_filter]> == air:
         # Empty frame - use 'not applciable' (common in this script, and saves space in large maps)
-        - define inv_type na
-        - define item_filter na
+        - determine <[no_match]>
     - else:
         # If an arrow we are interested in rotation, an UP pointing arrow is treated as an AUTO SORTER
         # he challenge is we want the rotation AFTER it is rotated not before ....
@@ -372,25 +418,33 @@ inventory_simple_frame_change:
 
     # Return both trigger and chest-like inventory location. use a map to self-document. This is all internal
     # data so size is not relevent.
-    - determine <map[trigger=<[frame_loc]>;chest=<[attached]>;filter=<[item_filter]>;type=<[inv_type]>]>
+    - determine <map[trigger=<[frame_loc]>;chest=<[attached]>;filter=<[item_filter]>;wildcard=false;type=<[inv_type]>]>
 
 
 # ****
 # **** Return an array of the sign_loc and chect_loc if both are valid. Else return nulls.
 # **** Effort is made to exit as quickly as possible
 # ****
-# TODO: See https://meta.denizenscript.com/Docs/Search/match
-# TODO: parse sign using simple parsing for now:
-# TODO: FIRST LINE: [feed], [inv]
-# TODO: SECOND LINE: https://meta.denizenscript.com/Docs/Search/match, all spaces/newlines removed
-# TODO: with newlines automatically getting a '|'
+# Sign usage:
+# Line 1: [inv|inventory|feed|feeder]
+# Line 2+: Item filter where first one that match wins. Multiple filters can be comma or space seperated. Word dwrap is NOT supported
+# The matches are case insensitibe and can be:
+#  * an exact name: cobblestone, arrow, apple
+#  * wild cards using '*', '?' anywhere:  *_ore, *stone*, *_seed?
+#  * SPECIAL item name, shown in upper case but are case insensitive. Multiple can be specified exactly as an item name.
+#       * OVERFLOW (any item that matched but has no room)
+#       * UNDEFINED (any item that did not match any chest)
+#
+# Tip: Multiple signs can be placed on an inventory to increase filters or add hoppers feeding an inverntory with even more signs
+#
+#
 inventory_simple_sign_details:
   type: procedure
   definitions: player|location
   debug: false
   script:
     # Id no match is found return nulls for each element
-    - define no_match <map[trigger=na;chest=na]>
+    - define no_match <map[trigger=na;chest=na;filter=na;type=na]>
 
     - define block <[location]||null>
     - if !<[block]>:
@@ -423,17 +477,22 @@ inventory_simple_sign_details:
     # and I need to reconsider Denizen. Maybe pure Java is not as fucking horrible parser is. While I liek some things in
     # Denizen refacrtoring code is a bloody waste of time for any complex. If we need another parser for text just
     # recode it and break out tiny procedures. Seems the way it is.
-    - debug log "<red>CONTENTS: <[block].sign_contents>"
     - define sign_details <proc[process_sign_text].context[<[block]>]>
+    - define type <[sign_details].get[type]>
+    - define filter <[sign_details].get[filter]>
+    - define message <[sign_details].get[message]>
+    - if <[message]> != na:
+        - narrate <[message]>
+    - if <[type]> != na:
+        - define filter <[sign_details].get[filter]>
+        - define wildcard <[sign_details].get[wildcard]>
+        - determine <map[trigger=<[location]>;chest=<[attached]>;filter=<[filter]>;wildcard=<[wildcard]>;type=<[type]>]>
+    - determine <[no_match]>
 
-    - debug log "<red> Returned sign details: <[sign_details]>"
 
-    # Return both trigger and chest-like inventory location
-    # TODO: fill in filter and type wehen sign parsing is done
-    - determine <map[trigger=<[location]>;chest=<[attached]>;filter=na;type=na]>
-
-
-
+# ***
+# ***
+# ****
 inventory_simple_list:
   type: command
   name: inventory_simple
@@ -468,6 +527,80 @@ inventory_simple_list:
         - stop
 
     - narrate "<yellow>Usage: /inventory_simple [list|reset]" targets:<player>
+
+
+# ***
+# *** Given a location string to sign. Note proc calls normally pass location data for a block.
+# *** Generate a map for the sign data. This happens at sign edit via a player.
+#
+#  * A value if 'na' is not-applicable meaning data is NOT available
+#  * type : (na) A string indicating if this for inventory or feeder. Check this for (na) indicating the
+# sign is NOT suitable for inventory management.
+#  * filter : (na) A string used for advanced_matches. At this time there is no optimizations,
+#  signed inventories are always a full match. Feeders will have a filter of (na)
+#  * message : (na) otherwise a message that should be sent to current player
+#
+# Example:  <map[filter=<[filter]>;type=<[sign_type]>;message=<[message]>]>
+#
+# Where a fil
+process_sign_text:
+  type: procedure
+  definitions: sign_obj
+  debug: false
+  script:
+    # Return data set
+    - define sign_type na
+    - define filter na
+    - define message na
+
+    - define result <map[type={;match=na;error=na]>
+
+    - define sign_obj <[sign_obj].block>
+
+    # Instead o geting fancy I am going to do a DEAD SIMPLE code.
+    - define sign_lines <list[]>
+    - foreach <[sign_obj].sign_contents> as:line :
+        # Clean lines of special cpracters
+        - define line <[line].unescaped.strip_color.trim.to_lowercase>
+        # Split these into more lines based on special characters
+        - foreach <[line].split[regex:[,;| ]]> as:part :
+            - define part <[part].trim>
+            - if <[part].length> > 0:
+                # Appen item to list
+                - define sign_lines:->:<[part]>
+
+    - if <[sign_lines].size> > 0:
+        # Get the type if the first line is like "[something]"
+        - define type <[sign_lines].get[1]>
+        # Tip: Using after/before here is messy as '[]', but useing variable subsition worked!
+        # NOTE: REGEX DID NOT for any of these
+        #   * FAILS: no match  <[type].regex[\[(.+?)\]].group[1]>
+        #   * FAILS: no match  <[type].regex[\[(.+?)\]].group[1]>
+        #   * Fails: no match  <[type].regex[<[open]>(.+?)<[close]>].group[1]>
+        #   * Fails: no match  <[type].regex[\<[open]>(.+?)\<[close]>].group[1]>
+        #   * Maybe there is some quopting mechanism that qorks but I am really bored of these annoyances
+        - define open '['
+        - define close ']'
+        # We cannot just use after["["] ... as that parse fails as does nto using quotes. using substituon works altough I am not sure
+        # why given Denzien's literal parser. But then again, the parser is, from my experience, in desperate need of a refactor
+        - define sign_type <[type].after[<[open]>].before[<[close]>]>
+        - if <[sign_type].advanced_matches[inv|inventory]>:
+            - define sign_type target
+            # Containue parsing spec
+            - define sign_lines <[sign_lines].remove[1]>
+            - define filter <[sign_lines].separated_by[|]>
+            # More denizien oddness, we cannat match regex: assumes  regex and escaping (regex\:) made not
+            # difference and a a regex it alwasys matched. Denizen is fuzzy, you just have to deal with it.
+            - if <[filter].contains[regex]>:
+                - define message "regex: is not supported at this time. Wildcards (*?) are supported"
+                - define filter na
+        - else if <[type].advanced_matches[feed|feeder]>:
+            - define sign_type feeder
+            # The rest of the sign can be anything you want
+
+    - determine <map[filter=<[filter]>;wildcard=true;type=<[sign_type]>;message=<[message]>]>
+
+
 
 
 # ==========================================
@@ -516,59 +649,44 @@ location_noworld:
     - determine <[return]>
 
 
-process_sign_text:
+# TODO: COPIED FROM AI -- WILL NEED A LOT OF WORK
+move_items_between_chests:
   type: procedure
-  definitions: sign_obj
-  debug: false
+  definitions: source_loc|slot|target_loc|item_count
   script:
-    # Return data set
-    - define sign_type na
-    - define filter na
-    - define message na
+    # Step 1: Validate both inventories
+    - define source <inventory[<[source_loc]>]>
+    - define target <inventory[<[target_loc]>]>
+    - if <[source].exists.not> || <[target].exists.not>:
+        - determine 0
 
-    - define result <map[type={;match=na;error=na]>
+    # Step 2: Validate item in source slot
+    - define item <[source].get[<[slot]>]||null>
+    - if <[item].is_empty>:
+        - determine 0
 
-    - define sign_obj <[sign_obj].block>
+    # Step 3: Determine max amount to move
+    - define max_amount <[item_count]||64>
+    - define item_amt <[item].qty>
+    - define to_move <[item_amt].min[<[max_amount]>]>
 
-    # Instead o geting fancy I am going to do a DEAD SIMPLE code.
-    - define sign_lines <list[]>
-    - foreach <[sign_obj].sign_contents> as:line :
-        # Clean lines of special cpracters
-        - define line <[line].unescaped.strip_color.trim.to_lowercase>
-        # Split these into more lines based on special characters
-        - foreach <[line].split[regex:[,;| ]]> as:part :
-            - define part <[part].trim>
-            - if <[part].length> > 0:
-                # Appen item to list
-                - define sign_lines:->:<[part]>
+    # Step 4: Determine available room in target
+    - define room 0
+    - foreach <[target].list_slots> as:slot:
+        - define slot_item <[target].get[<[slot]>]>
+        - if <[slot_item].is_empty>:
+            - define room <[room].add[<[item].max_stack]>>
+        - else if <[slot_item].matches[<[item]>]>:
+            - define space <[slot_item].max_stack.sub[<[slot_item].qty]>>
+            - if <[space]> > 0:
+                - define room <[room].add[<[space]>]>
 
-    - if <[sign_lines].size> > 0:
-        # Get the type if the first line is like "[something]"
-        - define type <[sign_lines].get[1]>
-        # Tip: Using after/before here is messy as '[]', but useing variable subsition worked!
-        # NOTE: REGEX DID NOT for any of these
-        #   * FAILS: no match  <[type].regex[\[(.+?)\]].group[1]>
-        #   * FAILS: no match  <[type].regex[\[(.+?)\]].group[1]>
-        #   * Fails: no match  <[type].regex[<[open]>(.+?)<[close]>].group[1]>
-        #   * Fails: no match  <[type].regex[\<[open]>(.+?)\<[close]>].group[1]>
-        #   * Maybe there is some quopting mechanism that qorks but I am really bored of these annoyances
-        - define open '['
-        - define close ']'
-        # We cannot just use after["["] ... as that parse fails as does nto using quotes. using substituon works altough I am not sure
-        # why given Denzien's literal parser. But then again, the parser is, from my experience, in desperate need of a refactor
-        - define sign_type <[type].after[<[open]>].before[<[close]>]>
-        - if <[sign_type].advanced_matches[inv|inventory]>:
-            - define sign_type inventory
-            # Containue parsing spec
-            - define sign_lines <[sign_lines].remove[1]>
-            - define filter <[sign_lines].separated_by[|]>
-            # More denizien oddness, we cannat match regex: assumes  regex and escaping (regex\:) made not
-            # difference and a a regex it alwasys matched. Denizen is fuzzy, you just have to deal with it.
-            - if <[filter].contains[regex]>:
-                - define message "regex: is not supported at this time. Wildcards (*?) are supported"
-                - define filter na
-        - else if <[type].advanced_matches[feed|feeder]>:
-            - define sign_type feeder
-            # The rest of the sign can be anything you want
+    - define move_amt <[to_move].min[<[room]>]>
 
-    - determine <map[filter=<[filter]>;type=<[sign_type]>;message=<[message]>]>
+    # Step 5: Actually move if possible
+    - if <[move_amt]> > 0:
+        - inventory remove qty:<[move_amt]> <[item]> from <[source]>
+        - inventory add qty:<[move_amt]> <[item]> to <[target]>
+
+    # Step 6: Return amount moved
+    - determine <[move_amt]>
