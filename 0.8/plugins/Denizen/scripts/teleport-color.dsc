@@ -9,7 +9,7 @@
 # group to PlayerB's blue teleporters. Teleporters can be used by any player but the groups are local to each player.
 #
 # Limitation: breaking Copper block does NOT remove the teleport from internal matrix BUT will cause
-# issues. Please add the copper block back to repair.
+# issues.
 
 teleporter_script:
   type: world
@@ -242,7 +242,7 @@ teleport_color_commands:
   tab complete:
     - define sub <context.args.get[1]||null>
     - if <[sub]> == null:
-        - determine <list[clear|list|assign|repair]>
+        - determine <list[clear|list|assign]>
     - if <[sub]> == "clear" || <[sub]> == "list":
         - define colors <player.flag[teleporters].keys||list[]>
         - define suggestions <[colors].parse[].include[all]>
