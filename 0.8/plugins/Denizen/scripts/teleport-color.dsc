@@ -52,21 +52,17 @@ add_teleporter:
         - stop
 
     - define base_path teleporters.<[color]>
-    # *** WARNING: The warning /error notifyinf us that list_flags is debug only scan be ignored
-    # *** there is no curent work around for using this
-    - define all_flags <[player].list_flags[]>
-    - define group_keys <[all_flags].filter[starts_with[<[base_path]>]]>
-    - narrate "Teleport flags: <[group_keys]>"
+    - define group_teleporters <[player].flag[<[base_path]>]>
 
     # Check if color group already has too many teleporters
-    - if <[group_keys].size> >= 16:
+    - if <[group_teleporters].size> >= 16:
         - narrate "<red>You already have 16 <[color]> teleporters." targets:<[player]>
         - stop
 
     - define created <util.current_time_millis>
     # DO NOT add spaces around semi-collons or '=' these will contirbute to the KEY name.'
     - define data_map <map[loc=<[loc]>;created=<[created]>;owner=<player.name>]>
-    - flag <[player]> teleporters.<[color]>.<[loc_key]>:<[data_map]>
+    - flag <[player]>  teleporters.<[color]>.<[loc_key]>:<[data_map]>
 
     - narrate "<green>Teleporter added: <[color]> for <[player].name>"
 
@@ -120,11 +116,12 @@ begin_teleport:
   definitions: player|loc
   script:
     - wait 1s
-    # Make sure player is still senaking after 1 second AND in the same location (they did not move)
-    - if <[player].is_sneaking> && <[player].location.block> == <[loc]>:
+    # Make sure player is still senaking after 1 second AND in the same location (they did not move, use block rounding to avoid jitter)
+    - if <[player].is_sneaking> && <[player].location.block> == <[loc].block>:
       - run do_teleport def:<[player]>|<[loc]>
 
 # Perform teleport
+#  * fix_only : (0) : If truethy will ONLY fix teleporters, otherwise will fix AND teleport player
 do_teleport:
   type: task
   debug: false
@@ -163,9 +160,26 @@ do_teleport:
     - foreach <[map].keys> as:key:
         - define item <[map].get[<[key]>]>
         - define found_loc <[item].get[loc]>
+
         # Remove and skip teleporters that are broken (often from a deleted world or bug/development)
-        - define is_valid <proc[teleport_exists].context[<[found_loc]>]>
+        - define world <[loc].world>
+        # TIP: Checking for is_loaded is NOT always going to work since the world may never have been loaded
+        # BUT MInecraft always loads base worlds and IF we force Phantomworld to auto load it's worlds
+        # then is_loaded  will work. Otherwise things get a lot more complex with file checking and
+        # force loading worlds since Denizen cannot access files OUTSIDE Denizen folder we cannot check for the
+        # world files existing on disk.!!!
+        - if !<server.worlds.contains[<[world]>]>:
+            - define is_valid false
+        - else if !<[loc].material.name.ends_with[_carpet]>:
+            - define is_valid false
+        - else:
+            - define is_valid true
+
         - if <[is_valid]>:
+          - define chunk <[found_loc].chunk>
+          - if !<[chunk].is_loaded>:
+            - chunkload <[chunk]>
+
           - define teleporter_current <[item].get[created]>
           # Track lowest for firtst
           - if <[first]> == null || <[teleporter_current]> < <[first].get[created]>:
@@ -195,6 +209,8 @@ do_teleport:
     - teleport <[player]> <[next_loc].add[0,1,0]>
     - playeffect <[next_loc].add[0,1,0]> effect:ender_signal visibility:50
 
+
+
 is_base_block:
   type: procedure
   debug: false
@@ -216,36 +232,13 @@ get_teleporter_list:
     - determine <map[]>
 
 
-# usage:
-#
-teleport_exists:
-  type: procedure
-  debug: false
-  definitions: loc
-  script:
-    - define world <[loc].world>
-    # TIP: Checking for is_loaded is NOT always going to work since the world may never have been loaded
-    # BUT MInecraft always loads base worlds and IF we force Phantomworld to auto load it's worlds
-    # then is_loaded  will work. Otherwise things get a lot more complex with file checking and
-    # force loading worlds since Denizen cannot access files OUTSIDE Denizen folder!!!
-    - if !<server.worlds.contains[<[world]>]>:
-        - determine false
-    - define chunk <[loc].chunk>
-    - if !<[chunk].is_loaded>:
-        - chunkload <[chunk]>
-    - if !<[loc].material.name.ends_with[_carpet]>:
-        - determine false
-    - determine true
-
-
-
 # *** COMMANDS
 teleport_color_commands:
   type: command
   name: teleport-color
   debug: false
   description: Manages teleport color teleporters
-  usage: /teleport-color [clear | list | assign | repair ] [color|all] [player (OP only)]
+  usage: /teleport-color [clear | list | assign ] [color|all] [player (OP only)]
   tab complete:
     - define sub <context.args.get[1]||null>
     - if <[sub]> == null:
@@ -320,29 +313,10 @@ teleport_color_commands:
 
     # Removes teleporters that are no longer present
     # === Repair MODE ===
-    - if <[sub]> == "repair":
-        - if !<player.is_op>:
-            - narrate "<red>You must be an OP to use REPAIR command." targets:<player>
-            - stop
-
-        - define all_players <proc[get_all_players]>
-        - foreach <[all_players]> as:owner:
-          - define check_locs <[owner].flag[teleporters]||map[]>
-          # Suppot cleanup code for accidental multi-ownership. That is possible
-          # due to bugs or sometimes using ASSIGN in creative mode
-          - foreach <[check_locs]> key:color as:items:
-            - foreach <[items]> key:loc_simple as:item:
-              - define is_valid <proc[teleport_exists].context[<[item].get[loc]>]>
-              - if <[is_valid]>:
-                - narrate "<green>Keeping found teleport: Owner: <[owner].name>, Color: <[color]>, Loc: <[loc_simple]>"
-              - else:
-                - flag <[owner]> teleporters.<[color]>.<[loc_simple]>:!
-                - narrate  "<red>Removing lost teleport: Owner: <[owner].name>, Color: <[color]>, Loc: <[loc_simple]>"
-
-        - stop
+    # REMOVED - teleports auto repair on use
 
     # === ASSIGN MODE ===
-    # Handles multi-assignment reapirs by only keeper assigne duser and remove from all others
+    # Handles multi-assignment (repair) only keeper assigned user and remove from all others
     - if <[sub]> == "assign":
         - if !<player.is_op>:
             - narrate "<red>You must be an OP to use this command." targets:<player>
