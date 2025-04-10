@@ -18,48 +18,18 @@
 # SIMPLE INVENTORY MAPPING STRUCTURE (Version 1)
 #
 # Each player stores inventory trigger mappings in:
-#   player.flag[si.<world>.<trigger_location>] = <entry_map>
+#   * player.flag[si.<world>.
+#   * item. -- indexe dby EXACT item_name
+#       * <item-name> = [t=tirgger-location,c=chest-location],i=item-name]
+#   * wildcard = [t=tirgger-location,c=chest-location],w=item-name]
+#   * trigger =  [t=tirgger-location,c=chest-location],t=item-name]
 #
-# The inventory_simple is the prefix to avoid collisions between plugins
-#
-# <trigger_location> is the `.simple` string form of the location (x,y,z)
-# The world name is used as a namespace, e.g. si.overworld.1777,112,-1271
-#
-# The <entry_map> contains the following short keys to reduce memory usage:
-#
-#   t: trigger location (the location of the sign or item frame)
-#   c: chest location (the trigger with inventory, like chest, barrel, hopper)
-#   i: item name string (optional; usually the item displayed in frame)
-#   g: group matching using wildcard (optional)
-#
-# Example entry (in real life this is on ONE line to avoid spaces)
-#   flag.player.si.overworld.1777,112,-1271 = map[
-#       t:1777,112,-1271;
-#       c:1777,112,-1270;
-#       i:apple;
-#       g:food
-#   ]
-#
-# All locations are stored in `.simple` form for compactness and easy lookup.
-# These mappings are fast to query per trigger or group, and cross-world access
-# is enabled by using world-scoped namespaces.
-#
+# 
 #
 # ------------------------------------------------------------------------------
 
 # TODO: CHANGE the inventory storage
-#   - all flags use the same entry data and there is no duplicates
-#   - a flag for all normal inventory items keyed by ITEM name (same entry data as curently)
-#       - Look up is VERY fast
-#   - a flag for all WILDCARD (advanced_macthes) that use the new sign wildcard and trigger type indexed by location
-#        - A loop but hopefully custom signs are not plentify
-#   - a flag for all feeders indexed by location 
-#       - Again a loop but easy
-#       - Any feeders in unloaded chunks are NOT processed
-#       - Any inventory in unloaded chunks are NOT processed
-#       - always runs if any player are present
-#       - moves a stack at a time 
-#       - these should process one feeder per player so no player is favored
+#
 #       - Hoopers run at 2.5 items second so we have a lot of flexibility to be at least this fast
 #           - sorter runs every tick and operates for 1ms max per, then saves state and waits for 1t
 #           - consider running 1 cycle for all feeders and move a STACK (or whatever fits)
@@ -351,7 +321,7 @@ si__remove_locations:
 
     # THis method is likley faster for cases needing multiple deletes, RARE.
     - if <[player].has_flag[<[flag_path]>]>:
-        # This works but is 3ms for 40 chests and one or zero duplicates. Which is the norm
+        # = This works but is 3ms for 40 chests and one or zero duplicates. Which is the norm
         #- define keep_entries <[player].flag[<[flag_path]>].filter_tag[<[filter_value].get[t].equals[<[trigger_loc]>].not>]>
         #- flag <[player]> <[flag_path]>:!
         #- flag <[player]> <[flag_path]>:<[keep_entries]>
