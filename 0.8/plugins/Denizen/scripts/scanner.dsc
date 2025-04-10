@@ -364,7 +364,7 @@ scanForItems:
 
             # Final processing, output, flags, and durability
             # clear flag even if it has not expired
-            - flag <player> better_tool_available!
+            - flag <player> better_tool_available:!
             - if <[scan_performed]>:
                 - if <player.gamemode> != creative:
                     # - Must use an inventory item for this - see https://meta.denizenscript.com/Docs/Search/durability
