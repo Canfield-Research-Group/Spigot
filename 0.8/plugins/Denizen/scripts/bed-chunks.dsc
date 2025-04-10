@@ -13,7 +13,6 @@ bed_chunk_loader:
     on script reload:
         - run bed_reload
 
-
     on system time minutely:
         - define chunk_refresh <proc[bed_chunk_constants].context[chunk_refresh_minutes]>
         - if <context.minute.mod[<[chunk_refresh]>]> == 0:
@@ -24,12 +23,12 @@ bed_chunk_loader:
         # Just re-scan for evbery player, should not be a performance issue
         - run bed_enable_chunkloader_for_player context:<player>
 
-    # Detect a player adding a bed
-    on player places *_bed:
-        # Wait for event to fire (a few ticks is enough)
-        - wait 2t
-        - narrate "<green>Tip: Bed placement detected, chunk loading updated"
-        - run bed_enable_chunkloader_for_player context:<player>
+    # == DISABLED Detect a player adding a bed - Minecraft does NTO change spawn point when placing a bed, so we do not either
+    #on player places *_bed:
+    #    # Wait for event to fire (a few ticks is enough)
+    #    - wait 2t
+    #    - narrate "<green>Tip: Bed placement detected, chunk loading updated"
+    #    - run bed_enable_chunkloader_for_player context:<player>
 
     # Detect when player right-clicks a bed to possibly set spawn
     on player right clicks *_bed:
