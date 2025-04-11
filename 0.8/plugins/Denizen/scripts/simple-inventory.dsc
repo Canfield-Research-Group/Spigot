@@ -17,12 +17,12 @@
 # ------------------------------------------------------------------------------
 # SIMPLE INVENTORY MAPPING STRUCTURE (Version 1)
 #
-# Each player stores inventory trigger mappings in:
+# Each player stores inventory feeder mappings in:
 #   * player.flag[si.<world>.
 #   * item. -- indexe dby EXACT item_name
 #       * <item-name> = [t=tirgger-location,c=chest-location],i=item-name]
 #   * wildcard = [t=tirgger-location,c=chest-location],w=item-name]
-#   * trigger =  [t=tirgger-location,c=chest-location],t=item-name]
+#   * feeder =  [t=tirgger-location,c=chest-location],t=item-name]
 #
 # 
 #
@@ -93,7 +93,7 @@ si__sign_or_frame_events:
 
     # === Right click on item frame
     # This just allows the open chest mechanism for frames. The actual inventory managment handling
-    # is handled via 'changes framed item'. Doing the same thing here is just a waste of cycles.
+    # is handled via 'changes framed item'. WE do do a repair here just in case
     on player right clicks entity:
         # TIP: Do NOT use context.location here, it will error out
         - if <player.is_sneaking>:
@@ -103,15 +103,16 @@ si__sign_or_frame_events:
         - if <[details].get[message]||"">:
             - narrate <[details].get[message]>
 
-        - define trigger <[details].get[trigger]>
-        - if !<[trigger]>:
-            - stop
-
         # an auto repair, in case something went wrong, this should not impact performance in any meaningful way
         - define chest <[details].get[chest]>
-        # IF we HAVE to we would do an add-mapping here - but so far the 'changes framed item' is all that is needed
-        - inventory open destination:<[chest]>
-        - determine cancelled
+        - if <[chest]>:
+            - run si__add_mapping def:<player>|<[details]>
+            - debug log "<green>Clicked: <[details]>"
+            - run open_chest_gui def:<player>|<[chest]>
+            - determine cancelled
+        - else:
+            # AUTO REPAIR: If there is no chest something broke, fix it
+            - run si__remove_mapping def:<player>|<[details]>
 
 
     # === ENTITY (Frame) changes ===
@@ -132,10 +133,6 @@ si__sign_or_frame_events:
         - if <[details].get[message]>:
             - narrate <[details].get[message]>
 
-        - define trigger <[details].get[trigger]>
-        - if !<[trigger]>:
-            - stop
-
         # an auto repair, in case something went wrong, this should not impact performance in any meaningful way
         - if <[action]> == BROKEN:
             - run si__remove_mapping def:<player>|<[details]>
@@ -152,9 +149,6 @@ si__sign_or_frame_events:
         # Sneaking and right click lets you edit a sign SOMETIMES but it is NOT reliable, it was a few hour ago. Not sure what's up with that
         # in any case we need a bypass so stick allows edit
         - if <player.is_sneaking> || <player.item_in_hand.material.name> == stick:
-            - if <[loc]> != null:
-                # Remember to check this sign being edited in some player action
-                - flag <player> si.pending_sign:<[loc]>
             - stop
 
         - if <[loc]> == null:
@@ -164,14 +158,16 @@ si__sign_or_frame_events:
         - if <[details].get[message]>:
             - narrate <[details].get[message]>
 
-        - define trigger <[details].get[trigger]>
-        - if !<[trigger]>:
+        - define feeder <[details].get[trigger]>
+        - if !<[feeder]>:
             - stop
 
         # an auto repair, in case something went wrong, this should not impact performance in any meaningful way
         - run si__add_mapping def:<player>|<[details].escaped>
         - define chest <[details].get[chest]>
-        - inventory open destination:<location[<[chest]>]>
+        - if <[chest]>:
+            - run open_chest_gui def:<player>|<[chest]>
+
         - determine cancelled
 
 
@@ -184,11 +180,10 @@ si__sign_or_frame_events:
         - define trigger <[details].get[trigger]>
         - if !<[trigger]>:
             - stop
-        - define chest <[details].get[chest]>
-        - run si__add_mapping def:<player>|<[trigger]>|<[chest]>
+        - run si__add_mapping def:<player>|<[details]>
 
 
-    # === Sign trigger broken ===
+    # === Sign broken ===
     after player breaks *_sign:
         - define trigger <context.location>
         - define block_name <[trigger].material.name>
@@ -198,7 +193,7 @@ si__sign_or_frame_events:
 
 
     # === Frame entity broken (REMOVED) ===
-    # This is NOT reliable as the 'on entioty dies' is not reliable called when a trigger holder a frame is broken.
+    # This is NOT reliable as the 'on entioty dies' is not reliable called when a frame is broken.
     # Favor code that dynamically removes missing items during auto sorting procesing.
 
 
@@ -230,6 +225,9 @@ si__add_mapping:
     - define item <[data].get[item]||false>
     - define wildcard <[data].get[wildcard]||false>
     - define is_feeder <[data].get[is_feeder]||false>
+    # Entity check is used during repairs/item-moves to make sure the object is still present for so auto repair
+    # can be triggered during item move.
+    - define is_entity <[data].get[is_entity]||false>
 
     - if !<[trigger_loc]>  || !<[chest_loc]>:
         - determine false
@@ -254,22 +252,25 @@ si__add_mapping:
     # Build flag path
     - define flag_root <proc[si__flag_path].context[<[trigger_loc]>]>
 
+    - if <[data].get[is_feeder]>:
+        - debug log "<red>Adding FEEDER SI: <[data]>"
+
     # if a Feeder then by indexed by LOCATION
     - if <[is_feeder]>:
-        # Optimize for feeder, all we need are trigger/chest location
+        # Optimize for feeder, all we need are feeder/chest location
         # = TODO: look for glowing tag or other speed indicator
-        - define entry <map[t=<[trigger_loc]>;c=<[chest_loc]>]>
-        - define flag_triggers <[flag_root]>.feeder
-        - flag <[player]> <[flag_triggers]>:->:<[entry]>
+        - define entry <map[t=<[trigger_loc]>;c=<[chest_loc]>;e=<[is_entity]>]>
+        - define flag_feeders <[flag_root]>.feeder
+        - flag <[player]> <[flag_feeders]>:->:<[entry]>
     - else:
         - if <[item]>:
             # ** ITEMS indexed by item name. Minimmal item settings
-            - define entry <map[t=<[trigger_loc]>;c=<[chest_loc]>;i=<[item]>]>
+            - define entry <map[t=<[trigger_loc]>;c=<[chest_loc]>;i=<[item]>;e=<[is_entity]>]>
             - define flag_loc <[flag_root]>.item.<[item]>
             - flag <[player]> <[flag_loc]>:->:<[entry]>
         - if <[wildcard]>:
             # ** wildcards ar ejust a list, again just minimal attributes
-            - define entry <map[t=<[trigger_loc]>;c=<[chest_loc]>;w=<[wildcard]>]>
+            - define entry <map[t=<[trigger_loc]>;c=<[chest_loc]>;w=<[wildcard]>;e=<[is_entity]>]>
             - define flag_loc <[flag_root]>.wildcard
             - flag <[player]> <[flag_loc]>:->:<[entry]>
 
@@ -296,7 +297,7 @@ si__remove_mapping:
     - define flag_path <[flag_root]>.item
     - if <[player].has_flag[<[flag_path]>]>:
         # Each item as it's on list scan. A bit slow but it is safe. This is only
-        # done on changes to frames/signs or whatever triggers
+        # done on changes to frames/signs or whatever feeders
         - define item_names <[player].flag[<[flag_path]>].keys>
         - foreach <[item_names]> as:item_name :
             - define flag_loc <[flag_path]>.<[item_name]>
@@ -340,10 +341,10 @@ si__remove_locations:
 # ***   - Each type of ivnetory key follows this text (dot (.) delimited)
 si__flag_path:
   type: procedure
-  definitions: trigger_loc
+  definitions: loc
   debug: false
   script:
-    - define world_name <[trigger_loc].world.name>
+    - define world_name <[loc].world.name>
     - define flag_path si.<[world_name]>
     - determine <[flag_path]>
 
@@ -369,7 +370,7 @@ si__frame_details:
     # Re-use the complex frame parser
     - define data <proc[si__parse_frame].context[<[player]>|<[entity]>]>
 
-    # Return both frame and attached trigger (normal locations, not simplified)
+    # Returns standard Invetory trigger data element
     - determine <[data]>
 
 
@@ -391,7 +392,7 @@ si__parse_frame:
   debug: false
   script:
     # Id no match is found return nulls for each element
-    - define no_match <map[trigger=false;chest=false;message=false]>
+    - define no_match <map[trigger=false;chest=false;message=false;is_entity=true]>
 
     # Frames are peculary, so they need to be trated a bit different
     - define frame_loc <[frame].location>
@@ -411,34 +412,33 @@ si__parse_frame:
         # Empty frame - use 'not applciable' (common in this script, and saves space in large maps)
         - determine <[no_match]>
     - else:
-        # If an arrow we are interested in rotation, an UP pointing arrow is treated as an AUTO SORTER
-        # he challenge is we want the rotation AFTER it is rotated not before ....
-        - define item_rotation <[frame].framed_item_rotation>
+        - define is_feeder false
+        - if <[item_filter]> == arrow:
+            # If an arrow we are interested in rotation, an UP pointing arrow is treated as an AUTO SORTER
+            # he challenge is we want the rotation AFTER it is rotated not before ....
+            - define item_rotation <[frame].framed_item_rotation>
 
-        # These go through a sequence starting with initial. Sometimes it takes 2 rotations to trigger
-        #   * NOTE: Be sure to `wait 1t` before calling this function so rortate is processed, otherwise things get otu of sync
-        #
-        # Most items visually appear pointing up when added to a frame(rotaetion NONE)
-        # But ARROWS appear pointing upper-right at rotation NONE, the following table shows how arrows
-        # visually move. This is because the image map for arrows was made with the upper-right visual.
-        #   * none (Arror pointing upper right)
-        #   * clockwise_45 (arrow pointing right)
-        #   * clockwise (pointing down-right)
-        #   * clockwise_135 (pointing down)
-        #   * rotation_flipped (pointing down-left)
-        #   * flipped_45 (pointing left)
-        #   * counter_clockwise (pointing upper-left)
-        #   * counter_clockwise_45 (poinitng up)
-        - if <[item_rotation]> == counter_clockwise_45:
-            # feeder
-            - define is_feeder true
-        - else:
-            # target
-            - define is_feeder false
+            # These go through a sequence starting with initial. Sometimes it takes 2 rotations to feeder
+            #   * NOTE: Be sure to `wait 1t` before calling this function so rortate is processed, otherwise things get otu of sync
+            #
+            # Most items visually appear pointing up when added to a frame(rotaetion NONE)
+            # But ARROWS appear pointing upper-right at rotation NONE, the following table shows how arrows
+            # visually move. This is because the image map for arrows was made with the upper-right visual.
+            #   * none (Arror pointing upper right)
+            #   * clockwise_45 (arrow pointing right)
+            #   * clockwise (pointing down-right)
+            #   * clockwise_135 (pointing down)
+            #   * rotation_flipped (pointing down-left)
+            #   * flipped_45 (pointing left)
+            #   * counter_clockwise (pointing upper-left)
+            #   * counter_clockwise_45 (poinitng up)
+            - if <[item_rotation]> == counter_clockwise_45:
+                # feeder
+                - define is_feeder true
 
-    # Return both trigger and chest-like inventory location. use a map to self-document. This is all internal
+    # Return both feeder and chest-like inventory location. use a map to self-document. This is all internal
     # data so size is not relevent.
-    - determine <map[trigger=<[frame_loc]>;chest=<[attached]>;item=<[item_filter]>;wildcard=false;is_feeder=<[is_feeder]>;message=false]>
+    - determine <map[trigger=<[frame_loc]>;chest=<[attached]>;item=<[item_filter]>;wildcard=false;is_feeder=<[is_feeder]>;message=false;entity=true]>
 
 
 # ****
@@ -464,7 +464,7 @@ si__parse_sign:
   debug: false
   script:
     # Id no match is found return nulls for each element
-    - define no_match <map[trigger=false;chest=false;item=false;wildcard=false;is_feeder=false;message=false]>
+    - define no_match <map[trigger=false;chest=false;item=false;wildcard=false;is_feeder=false;message=false;is_entity=false]>
 
     - define trigger <[location]||null>
     - if !<[trigger]>:
@@ -495,19 +495,8 @@ si__parse_sign:
 
 
 # ***
-# *** Given a location string to sign. Note proc calls normally pass location data for a trigger.
-# *** Generate a map for the sign data. This happens at sign edit via a player.
-#
-#  * A value if 'false' is not-applicable meaning data is NOT available
-#  * type : (false) A string indicating if this for inventory or feeder. Check this for (false) indicating the
-# sign is NOT suitable for inventory management.
-#  * filter : (false) A string used for advanced_matches. At this time there is no optimizations,
-#  signed inventories are always a full match. Feeders will have a filter of (false)
-#  * message : (false) otherwise a message that should be sent to current player
-#
-# Example:  <map[filter=<[filter]>;type=<[sign_type]>;message=<[message]>]>
-#
-# Where a fil
+# *** Given a location to a sign, generate a map for the sign data. This happens at sign edit via a player.
+# ***
 si__process_sign_text:
   type: procedure
   definitions: sign_obj
@@ -563,11 +552,58 @@ si__process_sign_text:
             - define is_feeder true
             # The rest of the sign can be anything you want
 
-    - define result <map[item=false;wildcard=<[wildcard]>;is_feeder=<[is_feeder]>;message=<[message]>]>
+    - define result <map[item=false;wildcard=<[wildcard]>;is_feeder=<[is_feeder]>;message=<[message]>;entity=false]>
     #- debug log "<red>Sign RESULT: <[result]>"
     - determine <[result]>
 
 
+# ***
+# Scan all feeders
+# ***
+si__process_feeders:
+  type: task
+  debug: false
+  definitions: tick_group
+  script:
+    - define chunk_cache <map[]>
+    - foreach <proc[get_all_players]> as:owner:
+        - if <[owner].has_flag[si].not>:
+            - foreach next
+
+        - define world_keys <[owner].flag[si].keys>
+        - foreach <[world_keys]> as:world_name:
+            - define feeders <[owner].flag[si.<[world_name]>.feeder]>
+            - debug log "<red>World Name: <[world_name]> -- <[feeders]>"
+            - stop
+
+            - foreach <[feeders]> as:feeder:
+                # Check feeder location
+                - define trigger_loc <[feeder].get[t]>
+                - define t_chunk <[trigger_loc].chunk.simple>
+                - define t_loaded <[chunk_cache.get[<[t_chunk]>]]||null>
+                - if <[t_loaded]> == null:
+                    - define t_loaded <chunk[<[t_chunk]>].is_loaded>
+                    - define chunk_cache <[chunk_cache].with[<[t_chunk]>].as[<[t_loaded]>]>
+                - if !<[t_loaded]>:
+                    - foreach next
+
+                # Check chest location
+                - define chest_loc <[feeder].get[c]>
+                - define c_chunk <[chest_loc].chunk.simple>
+
+                # Only check second chunk if it's different
+                - if <[t_chunk]> != <[c_chunk]>:
+                    - define c_loaded <[chunk_cache.get[<[c_chunk]>]]||null>
+                    - if <[c_loaded]> == null:
+                        - define c_loaded <chunk[<[c_chunk]>].is_loaded>
+                        - define chunk_cache <[chunk_cache].with[<[c_chunk]>].as[<[c_loaded]>]>
+                    - if !<[c_loaded]>:
+                        - foreach next
+
+                # Sign/chest chunks are both loaded.
+                #    remember to verify the objects actuall exist
+
+                - debug log "<red>FEEDER FOUND: <[owner].name> --- <[feeder]>"
 
 
 
@@ -579,7 +615,7 @@ si__process_sign_text:
 si__help:
   type: command
   name: simple_inventory
-  description: List or reset simple inventory triggers
+  description: List or reset simple inventory feeders
   usage: /simple_inventory [player] [list/clear/rebuild] [rebuild-radius-chunks]
   permission: simple_inventory.list
   debug: false
@@ -601,9 +637,9 @@ si__help:
     - if <[show_help]>:
         - narrate "<gold>Simple Inventory Help:"
         - narrate "<yellow>/simple_inventory [player] list"
-        - narrate "<gray>  View all active inventory triggers for that player"
+        - narrate "<gray>  View all active inventory feeders for that player"
         - narrate "<yellow>/simple_inventory [player] clear"
-        - narrate "<gray>  Remove all inventory trigger data"
+        - narrate "<gray>  Remove all inventory feeder data"
         - narrate "<yellow>/simple_inventory [player] repair [radius]"
         - narrate "<gray>  Scan signs/frames around player to rebuild flags"
         - narrate "<yellow>Default radius is <white>5<yellow> chunks."
@@ -680,7 +716,6 @@ si_scan_signs_nearby:
                 # A chunk scan is pretty slow so give up time for others
                 - foreach <[found_list]> as:sign :
                     - define details <proc[si__parse_sign].context[<[player]>|<[sign]>]>
-                    - define trigger <[details].get[trigger]>
                     - run si__add_mapping def:<[player]>|<[details].escaped>
                 - narrate "<green>Fixed <[found_list].size> signs at <[chunk]>"
 
@@ -693,8 +728,7 @@ si_scan_signs_nearby:
                     - if <[item]>:
                         - define details <proc[si__parse_frame].context[<[player]>|<[frame]>|<[item]>]>
                         - define trigger <[details].get[trigger]>
-                        - if <[trigger]>:
-                            - run si__add_mapping def:<[player]>|<[details].escaped>
+                        - run si__add_mapping def:<[player]>|<[details].escaped>
                 - narrate "<green>Fixed <[found_list].size> frames at <[chunk]>"
 
 
@@ -782,4 +816,11 @@ combined_benchmark:
         - define duration_millis_parsed <[end_ticks_parsed].sub[<[start_ticks_parsed]>]>
         - narrate "Parsed List Access Time: <[duration_millis_parsed]> ms for <[counter]> list size"
 
+
+
+
+# =================================
+# ==== MOVE TO COMMON LIBRARY elements
+# ====  Place tasks/prcedures here for easy testing then migrate to pl_common (paradise labs) when known to work and may be useful to other scripts
+# ====
 

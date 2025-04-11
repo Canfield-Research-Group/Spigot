@@ -51,6 +51,23 @@ location_noworld:
     - define return <[parts].get[1].to[-2].comma_separated>
     - determine <[return]>
 
+# ***
+# *** Simple open chest call used with the following to prevent double events  (like click entoty) from
+# *** actually opening the chest twice:
+# ***       - run open_chest_gui def:<player>|<[chest]> delay:1t
+open_chest_gui:
+  type: task
+  definitions: player|chest
+  debug: false
+  script:
+    # If chest is open avoid opening again. Inventory objects contain location data but are not directlry
+    # comapriable. We need to make sure both are inventory.
+    # This compexlity is not absiliyte;y needed, we culd just open the chest twice. But that could cause
+    # other plugins to fail, or the gui the be glicthy asn it woudl send two chest open events. So
+    # keep things clean
+    - if <[player].open_inventory> != <[chest].inventory>:
+        - inventory open destination:<[chest]>
+
 
 
 # ****
