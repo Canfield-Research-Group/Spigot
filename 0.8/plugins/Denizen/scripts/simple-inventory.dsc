@@ -232,6 +232,11 @@ si__add_mapping:
     - if !<[trigger_loc]>  || !<[chest_loc]>:
         - determine false
 
+    # Adjust all locations to block level, smaller data set and avoids any floating point oddifities
+    - define trigger_loc <[trigger_loc].block>
+    - define chest_loc <[chest_loc].block>
+
+
     # TIP: originally the idea was to shoten locations by dropping world. But that complicates the lookup code
     # and only aves aroun 7.5 KB for even 500 entries per player. Until proved necessary let's favor simplistiy and reduced
     # bugs and keep the location fully qualified
@@ -251,9 +256,6 @@ si__add_mapping:
 
     # Build flag path
     - define flag_root <proc[si__flag_path].context[<[trigger_loc]>]>
-
-    - if <[data].get[is_feeder]>:
-        - debug log "<red>Adding FEEDER SI: <[data]>"
 
     # if a Feeder then by indexed by LOCATION
     - if <[is_feeder]>:
@@ -322,6 +324,9 @@ si__remove_locations:
 
     # THis method is likley faster for cases needing multiple deletes, RARE.
     - if <[player].has_flag[<[flag_path]>]>:
+        # All elements are rpounded down to block level, but retain their object notation
+        - define trigger_block <[trigger_loc].block>
+
         # = This works but is 3ms for 40 chests and one or zero duplicates. Which is the norm
         #- define keep_entries <[player].flag[<[flag_path]>].filter_tag[<[filter_value].get[t].equals[<[trigger_loc]>].not>]>
         #- flag <[player]> <[flag_path]>:!
@@ -329,7 +334,7 @@ si__remove_locations:
 
         # THis method is likley faster for cases needing one or zero deletes, COMMON
         # = Loop is faster, about 1ms for 40 chests
-        - define found_entries <[player].flag[<[flag_path]>].filter_tag[<[filter_value].get[t].equals[<[trigger_loc]>]>]>
+        - define found_entries <[player].flag[<[flag_path]>].filter_tag[<[filter_value].get[t].equals[<[trigger_block]>]>]>
         - foreach <[found_entries]> as:entry :
             - flag <[player]> <[flag_path]>:<-:<[entry]>
             # THis is pretty easy to do here but ignore it since the keep_entries method makes the counter much more costly
@@ -438,7 +443,7 @@ si__parse_frame:
 
     # Return both feeder and chest-like inventory location. use a map to self-document. This is all internal
     # data so size is not relevent.
-    - determine <map[trigger=<[frame_loc]>;chest=<[attached]>;item=<[item_filter]>;wildcard=false;is_feeder=<[is_feeder]>;message=false;entity=true]>
+    - determine <map[trigger=<[frame_loc].block>;chest=<[attached].block>;item=<[item_filter]>;wildcard=false;is_feeder=<[is_feeder]>;message=false;entity=true]>
 
 
 # ****
@@ -490,7 +495,7 @@ si__parse_sign:
 
     # Get sign data and assign internal postional
     - define data <proc[si__process_sign_text].context[<[trigger]>]>
-    - define data <[data].with[trigger].as[<[trigger]>].with[chest].as[<[chest]>]>
+    - define data <[data].with[trigger].as[<[trigger].block>].with[chest].as[<[chest].block>]>
     - determine <[data]>
 
 
@@ -573,9 +578,6 @@ si__process_feeders:
         - define world_keys <[owner].flag[si].keys>
         - foreach <[world_keys]> as:world_name:
             - define feeders <[owner].flag[si.<[world_name]>.feeder]>
-            - debug log "<red>World Name: <[world_name]> -- <[feeders]>"
-            - stop
-
             - foreach <[feeders]> as:feeder:
                 # Check feeder location
                 - define trigger_loc <[feeder].get[t]>
@@ -585,6 +587,7 @@ si__process_feeders:
                     - define t_loaded <chunk[<[t_chunk]>].is_loaded>
                     - define chunk_cache <[chunk_cache].with[<[t_chunk]>].as[<[t_loaded]>]>
                 - if !<[t_loaded]>:
+                    - debug log "<red>Feeder trigger NOT loaded <[t_loaded]>"
                     - foreach next
 
                 # Check chest location
@@ -598,12 +601,13 @@ si__process_feeders:
                         - define c_loaded <chunk[<[c_chunk]>].is_loaded>
                         - define chunk_cache <[chunk_cache].with[<[c_chunk]>].as[<[c_loaded]>]>
                     - if !<[c_loaded]>:
+                        - debug log "<red>Feeder chest NOT loaded <[c_loaded]>"
                         - foreach next
 
                 # Sign/chest chunks are both loaded.
                 #    remember to verify the objects actuall exist
 
-                - debug log "<red>FEEDER FOUND: <[owner].name> --- <[feeder]>"
+                - debug log "<red>FEEDER FOUND: <[owner].name> --- <[feeder]>  "
 
 
 
@@ -674,14 +678,14 @@ si__help:
     - if <[command]> == repair:
         - define radius <context.args.get[3]||5>
         - narrate "<green>Repairing <[radius]> radius chunks around player"
-        - run si_scan_signs_nearby def:<[owner]>|<[radius]>
+        - run si_scan_triggers_nearby def:<[owner]>|<[radius]>
         - narrate "<yellow>Move to next location and run again"
         - stop
 
 
 # ***
 # *** Reapir by finding all signs within range of the character
-si_scan_signs_nearby:
+si_scan_triggers_nearby:
   type: task
   debug: false
   definitions: player|radius
