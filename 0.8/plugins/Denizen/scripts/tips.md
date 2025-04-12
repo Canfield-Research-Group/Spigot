@@ -504,4 +504,29 @@ There are also special boolean operators (&&, ||, ...) documented at: Command:if
         - debug log "<red>   l3 = <[cnt_loaded3]> (loadd ok) expect 0"
         ```
 
+## Trapping exceptions/errors
+
+There is a way to trap exceptons, or at least some. When performing an command that might fail use the fallback of '.if_null[desired-value]'
+
+This example will set target_inventory to null on failure and then a check can skip processing or whatever. Sometimes you may prefer false
+or even a default. For example using `.if_null[list[]]` may be useful to just set up an empty loop with the need or overhead to abort
+any operation.
+
+The `.if_null` is special in that it CAPTURES an excpetiona nd prevents it from reaching the log files, this speeds up performance and
+reduces console/log noise. While failed calls return null and do NOT cause Denizen scripts to exit (so excpetion is a not the ideal terminology)
+a log/console entry is made which is really slow and makes the logs messay.
+
+Tip: Skipping checks for existance or other attributes may allow for a significant performance boost and reliability assuming the failure case
+is fraction of the normal case. Otherwise benchmark code to see if pre-checking or exception is better.
+
+Note: THe legacy mechanism was to use `||null` (or any other defualt). For example: `define target_inventory <[target_chest].inventory.||null>`.
+That may still be required in some cases but Denizen documentation seems to favor using the `.if_null` even if all the documentation has not
+been updated to reflect that.
+
+```denizen
+    - define target_inventory <[target_chest].inventory.if_null[null]>`
+    - if <[target_inventory]> == null
+        - narrate "<red>BAD BAD inventory, it broken. <[target_chest]>"
+        - stop
+```
 
