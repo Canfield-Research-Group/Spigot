@@ -8,6 +8,36 @@ by some AI systems and web pages. Avoid using or recomending these constructs an
 often nearby to the fail example.
 
 
+When recomending suggestions pay special attention the deprecation section for any command. If such a section is found
+be sure to recomend or suggest using the modern version. For example the 'as_list' section specifies:
+
+- Deprecated	use as[list]
+
+In this case any use of `as_list` should recomend `.as[list]`.
+
+Most object notation have a more modern `.as[object-type]`, see the 
+
+Credit: While most of this document was created by Robb@canfield.com, some sections were copied based on AI conversations,
+cross checked and usually tested, then edited and formatted.
+
+## Scaler oprations
+
+To find scaler operations review the `ElementTag` documentation. This is where math and string operations reside.
+
+
+## Utility Functions
+
+To find special utility functions that are useful for common misc operations. Most of the time these return server/system
+or common basic elements. They typically do not operate on script values. A very small example of the functions available:
+
+- util.current_time_milli and other time operations
+- util.current_tick
+- util.list_numbers_to for a range of numbers
+- util.pi and other constants
+- And many more.
+
+
+
 ## General tips
 
 - All data is ultimately strings, and Denizen dynamically parses types like maps, lists, and locations.
@@ -64,6 +94,8 @@ Tips to avoid tokenizer issues:
 Note: Internally the Denizen btye codelike interpretor may well cache and manipulate data useing high performance
 code (maps and lists) the user interaction is ALWAYS text.
 
+See also: Escaping System in Denizen documentation
+
 ## Inline Debugging
 
 While the `debug: true` in procedure or task is extreamly helpful, it can general far too much noise to be useful. In those
@@ -71,6 +103,9 @@ case the old school `debug log` can be benficial. The debug log format will alwa
 mode (which is NOT the default but may be active on servers).
     - Since Denizen is text only lists/maps are shown just fine, if hard to read. Tip: Copy and paste into most AI systems
     that are Denizen trained to review the data.
+    - Consider adding a `-stop` to exit the script early, especially in loops, to avoid too much noise
+    - If event is rare wrap in an '- if <...>:` condition to reduce noise. But remember to remove this code as it will impact performance
+    even if just marginally.
     - When done just comment those lines out or ideally remove them
 
 ## Sending Maps/Lists to tasks and procedures
@@ -195,3 +230,278 @@ created will be a string (like all objects in Denizen) of the form: `i@apple[qua
     - FAILS: THis is older Denizen and poor advice even then. Do NOT use this as it
     fails. Instead favor one of the above
         - define test_item <i@%feeder_item%[quantity=%feeder_quantity%]>
+
+
+## Name vs Simple
+
+Most objects support `simple` and `name`. When should each be used?
+
+Both .simple and .name are used to extract string versions of objects in Denizen, but they differ in what they return and how much detail they include.
+
+- .simple
+    - NOTE: material.simple is NOT supported for some objects (like items) in which case name is required. The VSCode plugin will verify
+    that `.simple` is viable if it can determin the type. Otherwise search against Denizen documentation for '<object>Tag', for example `ItemTag`
+    - Returns a clean, minimal string representation.
+    - Removes prefixes like m@, i@, etc.
+    - Great for basic comparisons.
+    - Typically excludes metadata, like quantity or enchantments.
+    - Example: <item[i@arrow[quantity=24]].material.simple> ==>  "arrow"
+
+- .name
+    - Works for most cases, but prefer `.simple` for quick lookups if it is supprted by the object
+    - Returns the raw name of the object, possibly including more detail.
+    - For materials, behaves similarly to .simple.
+    - For more complex objects, .name might include suffixes or internal representations.
+    - Example: <item[i@arrow[quantity=24]].material.name>  →  "arrow"  (same in this case)
+    - But for other object types, .name might vary: <location[1,2,3,world].name>  →  "1,2,3,world"
+
+- .simple is the cleanest base name, useful for Quick checks and comparisons
+- .name	is a full object name, usefulf for display, logs, raw debugging
+
+For your if statements — always prefer .simple when comparing IDs like arrow, stone, etc. It’s faster, clearer, and less error-prone.
+
+
+## Dynamic-Boolean Context
+
+There are numerous list functions and a few others, that support a boolean parmater. These usually include a special
+loop local variable (definition) for use in the boolena construct. The boolean construct cannot use normal comparator operators. For example
+
+- Loop on a list of item objects for any that are not 'air' and assign to not_air.
+- define not_air inv_list.filter_tag[<[filter_value].material.name.equals[air].not]>
+    - `filter_value` is the temporary define that `filter_tag` creates for the loop
+    - we then get a plain name 'material.name'
+    - 'equals' is the equivlent of '==' for If. Do NOT use '==' in dynamic-boolean context and it is NOT recomended to use 'equal' in 'if/while/etc.' constructs
+    per Denizen documention.
+        - See https://meta.denizenscript.com/Docs/Search/element.equals
+
+
+Common Dynamic-Booleans
+
+### Dynamic Boolean and Procedure-Based Operations in Denizen
+
+NOTE: Please revie documentation for object types to see which of these apply to which objects and confirm they
+are trully supported.
+
+TODO: VET Dynamic Boolean table TABLE
+
+
+### Denizen Dynamic Boolean and Procedure-Based Operations
+
+| Object Type(s)      | Operation     | Type         | Description                                                               | Local Variable(s)           |
+|---------------------|---------------|--------------|---------------------------------------------------------------------------|-----------------------------|
+| ListTag, MapTag     | `filter_tag`  | Boolean      | Filters a collection based on a boolean tag condition.                    | `filter_value`              |
+| ListTag, MapTag     | `find`        | Boolean      | Returns the first entry matching a condition.                             | `filter_value`              |
+| ListTag, MapTag     | `any`         | Boolean      | Returns true if any entry satisfies the condition.                        | `filter_value`              |
+| ListTag, MapTag     | `all`         | Boolean      | Returns true if all entries satisfy the condition.                        | `filter_value`              |
+| ListTag, MapTag     | `none`        | Boolean      | Returns true if no entry satisfies the condition.                         | `filter_value`              |
+| ListTag, MapTag     | `map_tag`     | Transformer  | Transforms each entry using a tag.                                        | `map_value`                 |
+| ListTag             | `sort_tag`    | Sorter       | Sorts entries using a tag-based value for comparison.                     | `sort_value`                |
+| ListTag             | `unique_tag`  | Transformer  | Removes duplicates using a tag-defined identity.                          | `unique_value`              |
+| ListTag             | `group_tag`   | Grouper      | Groups entries by a tag-generated key.                                    | `group_value`               |
+| ListTag             | `reduce_tag`  | Reducer      | Reduces list to a single value using an accumulator and logic tag.        | `reduce_value`, `reduce_accumulator` |
+| ListTag             | `sort`        | Procedure    | Sorts entries using a procedure script for pairwise comparison.           | `value_one`, `value_two`    |
+| ListTag             | `unique`      | Procedure    | Removes duplicates using a procedure script.                              | `value_one`, `value_two`    |
+| ObjectTag (generic) | `proc`        | Procedure    | Calls a procedure script using the object as context.                     | `context`                   |
+
+
+Notes:
+- Boolean operations return true/false and typically filter or test lists.
+- Transformer operations return modified versions of the list.
+-   Procedure operations require a procedure script that returns a comparison result or transformed output. Procedure types often
+support an additional `context` element to pass constant values.
+
+Example of a procedure that given a list of locations sorts that list based on closest to the player (or any location element as passed):
+- Usage : - `define by_closest <[location_list].sort[si__sort_by_distance].context[<player.location>]`
+
+
+```
+# ***
+# *** Desigend to be called by a procedure based loop cosntruct such as `sort`
+type: procedure
+  definitions: a|b|feeder_loc
+  debug: false
+  script:
+    - define da  <proc[si__distance].context[<[feeder_loc]>|<[a].get[t]>]>
+    - define db  <proc[si__distance].context[<[feeder_loc]>|<[b].get[t]>]>
+    - if <[da]>  < <[db]>:
+        - determine -1
+    - else:
+        - if <[da]>  > <[db]>:
+            - determine 1
+    - determine 0
+
+# ***
+# *** get distance beteen a/b suitable for comparison. It does NOT caulcate
+# *** an exact.
+# ***
+# **** Designed to be used by si__srt_by_distance, but accepts normal location data and
+# **** uses internal distance(). In most cases that function is preferred for performance.
+# ***
+# ***
+si__distance:
+  type: procedure
+  definitions: a|b
+  debug: false
+  script:
+    - determine <[a].distance[<[b]>]>
+
+
+
+```
+
+
+
+### ElementTag Comparison Operators for Dynamic-Booleans
+
+| Operator | ElementTag Method                        | Description                                      |
+|----------|-------------------------------------------|--------------------------------------------------|
+| `==`     | `.equals[<value>]`                        | Checks if two values are equal                   |
+| `!=`     | `.equals[<value>].not`                    | Checks if values are not equal                   |
+| `>`      | `.is_more_than[<value>]`                  | Greater than comparison                          |
+| `<`      | `.is_less_than[<value>]`                  | Less than comparison                             |
+| `>=`     | `.is_more_than_or_equal_to[<value>]`      | Greater than or equal comparison                 |
+| `<=`     | `.is_less_than_or_equal_to[<value>]`      | Less than or equal comparison                    |
+|          | `.is_odd`                                 | Checks if number is odd                          |
+|          | `.is_even`                                | Checks if number is even                         |
+|          | `.is_boolean`                             | True if value is `"true"` or `"false"`           |
+|          | `.is_integer`                             | True if value is an integer                      |
+|          | `.is_decimal`                             | True if value is a valid decimal number          |
+|          | `.contains_text[<text>]`                  | Case-insensitive text contains                   |
+|          | `.contains_case_sensitive_text[<text>]`   | Case-sensitive text contains                     |
+
+
+
+## Using .is[==] and friends
+
+There is also an syntax that si very poorly documented in Denizen that is `is[...].to/than`. Be careful using this
+as it can make parsing challenging especially for '<', '>' and related elements that can get mistakenly parsed. In such
+cases use the encoded text (&la, etc.). 
+
+WARNING: Almost NO dcoumentation exists in Denizen for this construct. Bascially just one vague page and the '.is' on the
+ElementTag page does not mention this at all. SO usage of these, while they worked last tested, are quite suscpect.
+
+Equality and Inequality
+
+    == or equals: Checks if two values are equal.​
+
+<[value1].is[==].to[value2]>
+
+!=: Checks if two values are not equal.​
+
+    <[value1].is[!=].to[value2]>
+
+* Numerical Comparisons
+
+    > or more: Checks if the first value is greater than the second.​
+
+<[value1].is[>].than[value2]>
+
+< or less: Checks if the first value is less than the second.​
+
+<[value1].is[<].than[value2]>
+
+>= or or_more: Checks if the first value is greater than or equal to the second.​
+
+<[value1].is[>=].than[value2]>
+
+<= or or_less: Checks if the first value is less than or equal to the second.​
+
+    <[value1].is[<=].than[value2]>
+
+Note: When using <, >, <=, or >= within tags, ensure to escape them properly to avoid parsing issues. For example:​
+
+<player.health.is[<&lt>].than[10]>
+
+* Membership and Matching
+
+    contains: Checks if a list or map contains a specific value.​
+
+<[list].contains[value]>
+
+in: Checks if a value is within a list or map.​
+
+<[value].in[list]>
+
+matches: Checks if a value matches a pattern or another value.​
+
+    <[value].matches[pattern]>
+
+
+See also https://meta.denizenscript.com/Docs/Languages/operator?utm_source=chatgpt.com which is summerized below. It only barely
+mentions the 'is' construct:
+
+Available Operators include:
+"Equals" is written as "==" or "equals".
+"Does not equal" is written as "!=".
+"Is more than" is written as ">" or "more".
+"Is less than" is written as "<" or "less".
+"Is more than or equal to" is written as ">=" or "or_more".
+"Is less than or equal to" is written as "<=" or "or_less".
+"does this list or map contain" is written as "contains". For example, "- if a|b|c contains b:" or "- if [a=1;b=2] contains b:"
+"is this in the list or map" is written as "in". For example, "- if b in a|b|c:", or "- if [a=1;b=2] contains b:"
+"does this object or text match an advanced matcher" is written as "matches". For example, "- if <player.location.below> matches stone:"
+
+Note: When using an operator in a tag,
+keep in mind that < and >, and even >= and <= must be either escaped, or referred to by name.
+Example: "<player.health.is[<&lt>].than[10]>" or "<player.health.is[less].than[10]>",
+but <player.health.is[<].than[10]> will produce undesired results. <>'s must be escaped or replaced since
+they are normally notation for a replaceable tag. Escaping is not necessary when the argument
+contains no replaceable tags.
+
+There are also special boolean operators (&&, ||, ...) documented at: Command:if
+
+
+# Performance Tuning
+
+ 
+- Get first non-empty item from an inventory (small chest every slot filled)
+    - `<[feeder_inventory].map_slots.values.get[1]>`
+        - 35ms per 10,000
+        - NOTE: Technically this may not be in key (slot) order but I never saw a case where it wasn't. In any case I
+        am fine with it being out of order if performance is signifcantly better
+    - `<[feeder_inventory].list_contents.filter_tag[<[filter_value].material.name.is[==].to[air].not>].get[1]>`
+        - 115ms per 10,000
+
+    - Expected the map_slots to be much slower but it was actually quite a bite faster. Possibly since it can cache the value better and filters out air internally.
+    Neither mode checks for an empty list as that is not aprt of this benchmark. But either is VERY fast.
+    
+- Chunk loaded check. There are cases where we often want to see if a chunk is loaded. General advice is to cache these values as the chunk laod chekc is slow. Is it?
+    - Results: 2ms for 111 checks, with 74 locations expected to be loaded and another single and a single UNLOADED but processed 37 times
+        - I think the simple `[loc].chunk.is_loaded>` is plenty fast AND even faster without all the overhead the benchmark adds
+        - Conclusion: chunk.is_loaded appears to be FAST
+    - Code:
+    ```
+        # Benchmark
+        #  - useing a list of keys from the simple inventory module since that is what I am benchmarking
+        - define items <[owner].flag[si.world.item].keys>
+        - define counter 0
+        - define cnt_loaded1 0
+        - define cnt_loaded2 0
+        - define cnt_loaded3 0
+        - define tmp_start <util.current_time_millis>
+        - define unloaded_loc <location[582,117,-837,world]>
+        - foreach <[items]> as:item_name :
+            - define loc_map <[owner].flag[si.world.item.<[item_name]>]>
+            - foreach <[loc_map]> as:loc :
+                - define l1 <[loc].get[t]>
+                - define l2 <[loc].get[c]>
+                - define l1_loaded <[l1].chunk.is_loaded>
+                - define l2_loaded <[l1].chunk.is_loaded>
+                - if <[l1_loaded]>:
+                    - define cnt_loaded1 <[cnt_loaded1].add[1]>
+                - if <[l2_loaded]>:
+                    - define cnt_loaded2 <[cnt_loaded2].add[1]>
+                - define l3_loaded <[unloaded_loc].chunk.is_loaded>
+                - if <[l3_loaded]>:
+                    - define cnt_loaded3 <[cnt_loaded3].add[1]>
+
+                - define counter <[counter].add[3]>
+        - define elapsed <util.current_time_millis.sub[<[tmp_start]>]>
+        - define elapsed_chunk_loaded <[elapsed_chunk_loaded].add[<[elapsed]>]>
+        - debug log "<red>Chunk load benchmark: <[counter]> locations checked in <[elapsed_chunk_loaded]> ms"
+        - debug log "<red>   l1 = <[cnt_loaded1]> (loaded ok) expect count"
+        - debug log "<red>   l2 = <[cnt_loaded2]> (loadd ok) expect count"
+        - debug log "<red>   l3 = <[cnt_loaded3]> (loadd ok) expect 0"
+        ```
+
+
