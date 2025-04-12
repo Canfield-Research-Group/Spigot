@@ -58,6 +58,24 @@
 
 
 # ***
+# *** Configuration data
+# ***
+si_config:
+  type: data
+  data:
+    feeder:
+        # Feeder location data (trigger) is proccessed every x ticks where the x is calculated
+        # by a simple hash that when moded by tick_delay being zero the feeder is processed.
+        #   Use 0 to fire every tick, useful for debugging
+        tick_delay: 0
+        max_slots: 1
+        max_items: 64
+        # 10 chunks which
+        max_distance: 160
+
+
+
+# ***
 # *** Signs/Frames can make clicking on chests very challenging. Adjust the right-click to
 # *** pass through the right-click to the chest unless crouching
 # ***
@@ -112,7 +130,7 @@ si__sign_or_frame_events:
             - determine cancelled
         - else:
             # AUTO REPAIR: If there is no chest something broke, fix it
-            - run si__remove_mapping def:<player>|<[details]>
+            - run si__remove_mapping def:<player>|<context.entity.location>
 
 
     # === ENTITY (Frame) changes ===
@@ -135,7 +153,7 @@ si__sign_or_frame_events:
 
         # an auto repair, in case something went wrong, this should not impact performance in any meaningful way
         - if <[action]> == BROKEN:
-            - run si__remove_mapping def:<player>|<[details]>
+            - run si__remove_mapping def:<player>|<context.entity.location>
         - else:
             - run si__add_mapping def:<player>|<[details]>
 
@@ -220,6 +238,7 @@ si__add_mapping:
     - define data <[data].unescaped>
 
     # Expect to get full data element, we will optimize these in the when updating flags
+    # TIP: Do NOT Adjust all locations to block level, this prevents multiple frames per chest
     - define trigger_loc <[data].get[trigger]||false>
     - define chest_loc <[data].get[chest]||false>
     - define item <[data].get[item]||false>
@@ -231,11 +250,6 @@ si__add_mapping:
 
     - if !<[trigger_loc]>  || !<[chest_loc]>:
         - determine false
-
-    # Adjust all locations to block level, smaller data set and avoids any floating point oddifities
-    - define trigger_loc <[trigger_loc].block>
-    - define chest_loc <[chest_loc].block>
-
 
     # TIP: originally the idea was to shoten locations by dropping world. But that complicates the lookup code
     # and only aves aroun 7.5 KB for even 500 entries per player. Until proved necessary let's favor simplistiy and reduced
@@ -266,19 +280,19 @@ si__add_mapping:
         - flag <[player]> <[flag_feeders]>:->:<[entry]>
     - else:
         - if <[item]>:
-            # ** ITEMS indexed by item name. Minimmal item settings
-            - define entry <map[t=<[trigger_loc]>;c=<[chest_loc]>;i=<[item]>;e=<[is_entity]>]>
+            # ** ITEMS indexed by item name. Minimmal item settings, no need to keep name as that is in the index
+            - define entry <map[t=<[trigger_loc]>;c=<[chest_loc]>;e=<[is_entity]>]>
             - define flag_loc <[flag_root]>.item.<[item]>
             - flag <[player]> <[flag_loc]>:->:<[entry]>
         - if <[wildcard]>:
-            # ** wildcards ar ejust a list, again just minimal attributes
+            # ** wildcards ar ejust a list, again just minimal attributes, here we need wildcard
+            # ** since wildcards are to variabel to make an index useful
             - define entry <map[t=<[trigger_loc]>;c=<[chest_loc]>;w=<[wildcard]>;e=<[is_entity]>]>
             - define flag_loc <[flag_root]>.wildcard
             - flag <[player]> <[flag_loc]>:->:<[entry]>
 
     - define end_ticks <util.current_time_millis>
     - define duration_millis <[end_ticks].sub[<[start_ticks]>]>
-    #- debug log "<red>Scan time: <[duration_millis]>"
     - determine true
 
 
@@ -290,10 +304,11 @@ si__remove_mapping:
   definitions: player|trigger_loc
   debug: false
   script:
+
     # Use FULL search data since later the indexes will need ato be sorted by nearest so full notation is easier overall
     - define search_loc <[trigger_loc]>
 
-    - define flag_root <proc[si__flag_path].context[<[trigger_loc]>]>
+    - define flag_root <proc[si__flag_path].context[<[search_loc]>]>
 
     # Remove items, these are indexed by NAME, then a list of maps with t=target location (full)
     - define flag_path <[flag_root]>.item
@@ -325,7 +340,7 @@ si__remove_locations:
     # THis method is likley faster for cases needing multiple deletes, RARE.
     - if <[player].has_flag[<[flag_path]>]>:
         # All elements are rpounded down to block level, but retain their object notation
-        - define trigger_block <[trigger_loc].block>
+        - define trigger_block <[trigger_loc]>
 
         # = This works but is 3ms for 40 chests and one or zero duplicates. Which is the norm
         #- define keep_entries <[player].flag[<[flag_path]>].filter_tag[<[filter_value].get[t].equals[<[trigger_loc]>].not>]>
@@ -337,8 +352,6 @@ si__remove_locations:
         - define found_entries <[player].flag[<[flag_path]>].filter_tag[<[filter_value].get[t].equals[<[trigger_block]>]>]>
         - foreach <[found_entries]> as:entry :
             - flag <[player]> <[flag_path]>:<-:<[entry]>
-            # THis is pretty easy to do here but ignore it since the keep_entries method makes the counter much more costly
-
 
 
 # ***
@@ -443,7 +456,7 @@ si__parse_frame:
 
     # Return both feeder and chest-like inventory location. use a map to self-document. This is all internal
     # data so size is not relevent.
-    - determine <map[trigger=<[frame_loc].block>;chest=<[attached].block>;item=<[item_filter]>;wildcard=false;is_feeder=<[is_feeder]>;message=false;entity=true]>
+    - determine <map[trigger=<[frame_loc]>;chest=<[attached]>;item=<[item_filter]>;wildcard=false;is_feeder=<[is_feeder]>;message=false;is_entity=true]>
 
 
 # ****
@@ -473,7 +486,6 @@ si__parse_sign:
 
     - define trigger <[location]||null>
     - if !<[trigger]>:
-        #- debug log "<red>NO Location"
         - determine <[no_match]>
 
     - define block_name <[trigger].material.name>
@@ -484,18 +496,16 @@ si__parse_sign:
     - define facing <[trigger].block_facing||null>
     # This is NOT just attached blocks but also blocks behind the sign. Filter for only attached  proved annoying so allow a sign to be in FRONT of chest
     - if !<[facing]>:
-        #- debug log "<red>NO Facing"
         - determine <[no_match]>
 
     - define chest <[location].relative[<[facing].mul[-1]>]>
     - define is_allowed <proc[is_chest_like].context[<[chest]>]>
     - if !<[is_allowed]>:
-        #- debug log "<red>NOT allowed"
         - determine <[no_match]>
 
     # Get sign data and assign internal postional
     - define data <proc[si__process_sign_text].context[<[trigger]>]>
-    - define data <[data].with[trigger].as[<[trigger].block>].with[chest].as[<[chest].block>]>
+    - define data <[data].with[trigger].as[<[trigger]>].with[chest].as[<[chest]>]>
     - determine <[data]>
 
 
@@ -539,14 +549,11 @@ si__process_sign_text:
         # We cannot just use after["["] ... as that parse fails as does nto using quotes. using substituon works altough I am not sure
         # why given Denzien's literal parser. But then again, the parser is, from my experience, in desperate need of a refactor
         - define sign_type <[type].after[<[open]>].before[<[close]>]>
-        #- debug log "<red>Sign type: <[sign_type]>"
         - if <[sign_type].advanced_matches[inv|inventory]>:
             - define is_feeder false
             # Containue parsing spec
             - define sign_lines <[sign_lines].remove[1]>
-            #- debug log "<red>Sign lines: <[sign_lines]>"
             - define wildcard <[sign_lines].separated_by[|]>
-            #- debug log "<red>wildcard: <[wildcard]>"
             # More denizien oddness, we cannat match regex: assumes  regex and escaping (regex\:) made not
             # difference and a a regex it alwasys matched. Denizen is fuzzy, you just have to deal with it.
             - if <[wildcard].contains[regex]>:
@@ -557,8 +564,7 @@ si__process_sign_text:
             - define is_feeder true
             # The rest of the sign can be anything you want
 
-    - define result <map[item=false;wildcard=<[wildcard]>;is_feeder=<[is_feeder]>;message=<[message]>;entity=false]>
-    #- debug log "<red>Sign RESULT: <[result]>"
+    - define result <map[item=false;wildcard=<[wildcard]>;is_feeder=<[is_feeder]>;message=<[message]>;is_entity=false]>
     - determine <[result]>
 
 
@@ -587,12 +593,11 @@ si__process_feeders:
                     - define t_loaded <chunk[<[t_chunk]>].is_loaded>
                     - define chunk_cache <[chunk_cache].with[<[t_chunk]>].as[<[t_loaded]>]>
                 - if !<[t_loaded]>:
-                    - debug log "<red>Feeder trigger NOT loaded <[t_loaded]>"
                     - foreach next
 
                 # Check chest location
-                - define chest_loc <[feeder].get[c]>
-                - define c_chunk <[chest_loc].chunk.simple>
+                - define feeder_chest <[feeder].get[c]>
+                - define c_chunk <[feeder_chest].chunk.simple>
 
                 # Only check second chunk if it's different
                 - if <[t_chunk]> != <[c_chunk]>:
@@ -601,15 +606,116 @@ si__process_feeders:
                         - define c_loaded <chunk[<[c_chunk]>].is_loaded>
                         - define chunk_cache <[chunk_cache].with[<[c_chunk]>].as[<[c_loaded]>]>
                     - if !<[c_loaded]>:
-                        - debug log "<red>Feeder chest NOT loaded <[c_loaded]>"
                         - foreach next
 
+                # *** Chunks for source/target are loaded so we can continue
+
                 # Sign/chest chunks are both loaded.
-                #    remember to verify the objects actuall exist
+                # It's too slow (I think) to remember to verify all the details, what is critical is
+                # that the chest is present. That's because we do NOT check chests for removal (should we?)
+                # anmd even if we did we still need to check here to avoid throwing exceptions
+                - if <proc[is_chest_like].context[<[feeder_chest]>].not>:
+                    # Remove this bad item from the list
+                    - run si__remove_mapping def:<player>|<[feeder_chest]>
+                    - foreach next
+                - define feeder_inventory <[feeder_chest].inventory>
+                - if <[feeder_inventory].is_empty>:
+                    - foreach next
 
-                - debug log "<red>FEEDER FOUND: <[owner].name> --- <[feeder]>  "
+                # Loop on each item in feeder until SOMETHING can be moved
+                - define feeder_slots <[feeder_inventory].map_slots>
+                - foreach <[feeder_slots]> as:feeder_item key:feeder_slot :
+                    # Exit as soon as any item be moved by any quantity
+                    - define feeder_item_name <[feeder_item].material.name>
+                    - define feeder_item_count <[feeder_item].quantity>
+                    - define items_path si.<[world_name]>.item.<[feeder_item_name]>
+                    - define targets_list <[owner].flag[<[items_path]>]||false>
+                    - if <[targets_list]>:
+                        # Scan these locations in order, on match Try to move
+                        - define sorted <[targets_list].sort[si__sort_by_distance].context[<[feeder].get[t]>]>
+                        - foreach <[sorted]> as:target :
+                            - define target_chest <[target].get[c]>
+                            - if <proc[is_chest_like].context[<[target_chest]>].not>:
+                                # Remove this bad item from the list
+                                - debug log "<red>Warning: Check inventory at <[target_chest]> not found, removing from Inventory list"
+                                - run si__remove_mapping def:<player>|<[target_chest]>
+                                - foreach next
+
+                            - define target_inventory <[target_chest].inventory>
+                            - define target_slots <[target_inventory].map_slots>
+                            - debug log "<red>Feeder Item: <[feeder_item]> --- <[feeder_item_count]> --- Slots: <[feeder_slot]>"
+                            - define space_available <[target_inventory].can_fit[<[feeder_item_name]>].count>
+                            - debug log "<red>Target: <[target_chest]> --- Avail: <[space_available]> -- Target Slots: <[target_slots]>""
+                            - if <[space_available]> <= <[feeder_item_count]>:
+                                - define items_to_move <[space_available]>
+                            - else:
+                                - define items_to_move <[feeder_item_count]>
+
+                            - if <[items_to_move]> <= 0 :
+                                # No space in the target so continue scanning items
+                                - foreach next
 
 
+                            # Adjust working inventory
+                            - debug log "<red>Quanity to move: <[items_to_move]>"
+                            - debug log "<red>Start Feeder: <[feeder_inventory].map_slots>"
+                            - debug log "<red>Start Target: <[target_inventory].map_slots>"
+                            - define target_inventory <[target_inventory].include[<[feeder_item_name]>].quantity[<[items_to_move]>]>
+                            # Remove from feeder
+                            - define feeder_inventory <[feeder_inventory].exclude_item[<[feeder_item_name]>].quantity[<[items_to_move]>]>
+
+                            - debug log "<red>New Feeder: <[feeder_inventory].map_slots>"
+                            - debug log "<red>New Target: <[target_inventory].map_slots>"
+
+                            # Apply to game objects
+                            - inventory move origin:<[feeder_inventory]> destination:<[feeder_chest].inventory>
+                            - inventory move origin:<[target_inventory]> destination:<[target_chest].inventory>
+
+                            - stop
+
+
+
+# ***
+# *** Sorts a list that contains SI map data so the list is ordered by nearest (3D) to the source
+# *** This procedure is typically called via:
+# ***   define sorted <[items_list].sort[si__sort_by_distance].context[<[feeder].get[t]>]>
+# ***   Where the context is usually a feeder map but can be anything that provides a location
+# ***
+# *** This function is seldom called directly but if so:
+# ***  a : Simple Inventory mapping where key 't' is the trigger (sign/frame) position provided by 'sort.proc.context' (first element)
+# ***  b : Simple Inventory mapping where key 't' is the trigger (sign/frame) position provided by 'sort.proc.context' (second element)
+# ***  feeder_loc : Usually via feeder.get[t] but can be anything that provides a location
+#
+# *** Returns: -1 for a < b, 1 for a > b, 0 for equality
+si__sort_by_distance:
+  type: procedure
+  definitions: a|b|feeder_loc
+  debug: false
+  script:
+    - define da  <proc[si__distance].context[<[feeder_loc]>|<[a].get[t]>]>
+    - define db  <proc[si__distance].context[<[feeder_loc]>|<[b].get[t]>]>
+    - if <[da]>  < <[db]>:
+        - determine -1
+    - else:
+        - if <[da]>  > <[db]>:
+            - determine 1
+    - determine 0
+
+
+# ***
+# *** get distance beteen a/b suitable for comparison. It does NOT caulcate
+# *** an exact.
+# ***
+# **** Designed to be used by si__srt_by_distance, but accepts normal location data and
+# **** uses internal distance(). In most cases that function is preferred for performance.
+# ***
+# ***
+si__distance:
+  type: procedure
+  definitions: a|b
+  debug: false
+  script:
+    - determine <[a].distance[<[b]>]>
 
 
 # ***
@@ -678,14 +784,14 @@ si__help:
     - if <[command]> == repair:
         - define radius <context.args.get[3]||5>
         - narrate "<green>Repairing <[radius]> radius chunks around player"
-        - run si_scan_triggers_nearby def:<[owner]>|<[radius]>
+        - run si_repair_triggers_nearby def:<[owner]>|<[radius]>
         - narrate "<yellow>Move to next location and run again"
         - stop
 
 
 # ***
 # *** Reapir by finding all signs within range of the character
-si_scan_triggers_nearby:
+si_repair_triggers_nearby:
   type: task
   debug: false
   definitions: player|radius
