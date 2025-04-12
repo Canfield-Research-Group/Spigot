@@ -152,10 +152,13 @@ si__sign_or_frame_events:
             - narrate <[details].get[message]>
 
         # an auto repair, in case something went wrong, this should not impact performance in any meaningful way
-        - if <[action]> == BROKEN:
-            - run si__remove_mapping def:<player>|<context.entity.location>
+        - if <list[BROKEN|REMOVE].contains[<[action]>]>:
+            #- debug log "<green> ON <[action]> called remove ON <[frame]>"
+            - run si__remove_mapping def:<player>|<[frame]>
         - else:
-            - run si__add_mapping def:<player>|<[details]>
+            # Triggered by: PLACE
+            #- debug log "<green> ON <[action]> called add ON <[details]>"
+            - run si__add_mapping def:<player>|<[details].escaped>
 
 
     # === Right click on sign
@@ -293,6 +296,8 @@ si__add_mapping:
 
     - define end_ticks <util.current_time_millis>
     - define duration_millis <[end_ticks].sub[<[start_ticks]>]>
+
+    - define data <[player].flag[<[flag_root]>.item.cobblestone]>
     - determine true
 
 
@@ -306,7 +311,16 @@ si__remove_mapping:
   script:
 
     # Use FULL search data since later the indexes will need ato be sorted by nearest so full notation is easier overall
-    - define search_loc <[trigger_loc]>
+    #  Sometimes we receive a NON location element, liske a .../item_frame so we handle it.
+    #  We do not have an 'is[location]' or anything close so we try to use '.location' , if it works we continue using that.
+    #  as it is probably a frame object NOT location (sucha s sent during REMOVE). If the check fails we handle it with
+    # a fallback (is_null) to capture/hide the error logging and we use the item AS IS since a location does not support
+    # location, This works for sings, frames and changing frame items.
+    #  TODO: This check feels hacky, but not totlaly out of Denizen scope
+    - if <[trigger_loc].location.if_null[null]> == null:
+        - define search_loc <[trigger_loc]>
+    - else:
+        - define search_loc <[trigger_loc].location>
 
     - define flag_root <proc[si__flag_path].context[<[search_loc]>]>
 
@@ -317,17 +331,16 @@ si__remove_mapping:
         # done on changes to frames/signs or whatever feeders
         - define item_names <[player].flag[<[flag_path]>].keys>
         - foreach <[item_names]> as:item_name :
-            - define flag_loc <[flag_path]>.<[item_name]>
-            - run si__remove_locations def:<[player]>|<[flag_loc]>|<[search_loc]>
+            - define flag_path_data <[flag_path]>.<[item_name]>
+            - run si__remove_locations def:<[player]>|<[flag_path_data]>|<[search_loc]>
 
     # Remove Wildcard / groups which are not indexed, just a list of maps
-    - define flag_loc <[flag_root]>.wildcard
-    - run si__remove_locations def:<[player]>|<[flag_loc]>|<[search_loc]>
+    - define flag_path_data <[flag_root]>.wildcard
+    - run si__remove_locations def:<[player]>|<[flag_path_data]>|<[search_loc]>
 
     # Remove Feeders which ar eno indexed, just a list of maps. Usually under 20 or so
-    - define flag_loc <[flag_root]>.feeder
-    - run si__remove_locations def:<[player]>|<[flag_loc]>|<[search_loc]>
-
+    - define flag_path_data <[flag_root]>.feeder
+    - run si__remove_locations def:<[player]>|<[flag_path_data]>|<[search_loc]>
 
 # ***
 # *** Remove all entries that match the target key (t) from the list specified by the flag path
@@ -339,7 +352,6 @@ si__remove_locations:
 
     # THis method is likley faster for cases needing multiple deletes, RARE.
     - if <[player].has_flag[<[flag_path]>]>:
-        # All elements are rpounded down to block level, but retain their object notation
         - define trigger_block <[trigger_loc]>
 
         # = This works but is 3ms for 40 chests and one or zero duplicates. Which is the norm
@@ -351,6 +363,8 @@ si__remove_locations:
         # = Loop is faster, about 1ms for 40 chests
         - define found_entries <[player].flag[<[flag_path]>].filter_tag[<[filter_value].get[t].equals[<[trigger_block]>]>]>
         - foreach <[found_entries]> as:entry :
+            - debug log "<red>REMOVING entry: <[entry]>"
+            - define remove_flag true
             - flag <[player]> <[flag_path]>:<-:<[entry]>
 
 
@@ -585,7 +599,7 @@ si__process_feeders:
     - define elapsed_distance 0
     - define elapsed_setup 0
     - define elapsed_move 0
-
+    - define bad_chest <location[1809,119,-1272,world]>
 
 
     - define chunk_cache <map[]>
@@ -597,44 +611,29 @@ si__process_feeders:
         - foreach <[world_keys]> as:world_name:
             - define feeders <[owner].flag[si.<[world_name]>.feeder]>
             - foreach <[feeders]> as:feeder:
+                # Whent his becomes true the current feeder is DONE
+                - define move_completed false
 
-                # Check feeder location
+                # Check feeder location (trigger)
                 - define trigger_loc <[feeder].get[t]>
-                - define t_chunk <[trigger_loc].chunk.simple>
-                - define t_loaded <[chunk_cache.get[<[t_chunk]>]]||null>
-                - if <[t_loaded]> == null:
-                    - define t_loaded <chunk[<[t_chunk]>].is_loaded>
-                    - define chunk_cache <[chunk_cache].with[<[t_chunk]>].as[<[t_loaded]>]>
-                - if !<[t_loaded]>:
+                - if <[trigger_loc].chunk.is_loaded.not>:
                     - foreach next
 
                 # Check chest location
                 - define feeder_chest <[feeder].get[c]>
-                - define c_chunk <[feeder_chest].chunk.simple>
-
-                # Only check second chunk if it's different
-                - if <[t_chunk]> != <[c_chunk]>:
-                    - define c_loaded <[chunk_cache.get[<[c_chunk]>]]||null>
-                    - if <[c_loaded]> == null:
-                        - define c_loaded <chunk[<[c_chunk]>].is_loaded>
-                        - define chunk_cache <[chunk_cache].with[<[c_chunk]>].as[<[c_loaded]>]>
-                    - if !<[c_loaded]>:
-                        - foreach next
-
-                - define elapsed <util.current_time_millis.sub[<[tmp_start]>]>
-                - define elapsed_chunk_loaded <[elapsed_chunk_loaded].add[<[elapsed]>]>
-
-                # *** Chunks for source/target are loaded so we can continue
-
-                # Sign/chest chunks are both loaded.
-                # It's too slow (I think) to remember to verify all the details, what is critical is
-                # that the chest is present. That's because we do NOT check chests for removal (should we?)
-                # anmd even if we did we still need to check here to avoid throwing exceptions
-                - if <proc[is_chest_like].context[<[feeder_chest]>].not>:
-                    # Remove this bad item from the list
-                    - run si__remove_mapping def:<player>|<[feeder_chest]>
+                - if <[feeder_chest].chunk.is_loaded.not>:
                     - foreach next
-                - define feeder_inventory <[feeder_chest].inventory>
+
+
+                # ** Sign/chest chunks are both loaded.
+                #   check if feeder is inventory like. Be QUICK, the longer procedure for this is FAR too sslow
+                - define feeder_inventory <[feeder_chest].inventory.if_null[null]>
+                - if <[feeder_inventory]> == null:
+                    - debug log "<red>Feeder no longer a valid inventory, removing: <[owner]> -- <[feeder_chest]>"
+                    - run si__remove_mapping def:<[owner]>|<[feeder_chest]>
+                    - foreach next
+
+                # If empty then nothing to do so exit
                 - if <[feeder_inventory].is_empty>:
                     - foreach next
 
@@ -643,8 +642,10 @@ si__process_feeders:
                 - define ticks_after_setup <util.current_time_millis>
 
                 # Benchmark, it takes approx 40-50 ms to move 27 slots of items to one or more item chests
-                # 
                 - foreach <[feeder_slots]> as:feeder_item :
+                    - if <[move_completed]>:
+                        - foreach stop
+
                     # Exit as soon as any item be moved by any quantity
                     - define tmp_start <util.current_time_millis>
                     - define feeder_item_name <[feeder_item].material.name>
@@ -656,21 +657,57 @@ si__process_feeders:
 
                     - if <[targets_list]>:
                         # Scan these locations in order, on match Try to move
+
+                        # Benchmark:
+                        #   Original: 211 ms for 1000
+                        #   Inline 140ms for 1000 -- drop 2nd proc
+                        #   O(n): 45ms for 1000 -- use O(n) for distance then sprting that list. Changes [index,distance] but that is perfectly usable to me
+                        #   Random: 3ms for 1000
+
                         - define tmp_start <util.current_time_millis>
-                        - define sorted <[targets_list].sort[si__sort_by_distance].context[<[feeder].get[t]>]>
+
+                        # Get starting list
+                        - define distances <list[]>
+                        # Perform a scan to build a list: [[index, distance], ....]
+                        #   This calls the slow distance (and skips the proc) once per list (old code was called 6 tiems for 3 elements qsort)
+                        - foreach <[targets_list]> as:entry key:loop_index :
+                            - define dist <[entry].get[t].distance[<[trigger_loc]>]>
+                            - define distances:->:<list[<[loop_index]>|<[dist]>]>
+                        # Now we want to sort the list using a tag into the each list item, which is itself a list. And in this case a tag of 1 gets the index
+                        # TIP: This is useful to remember as it allows list with maps to be sorted by their key as long as the key is a pure numeric or alpah (see sort_by_value)
+                        - define distances <[distances].sort_by_number[2]>
+                        # THis is for benchmark only and is shows HOW to retrive the trigger_list that coresesponds to the sort order
+                        # this lookup is very fast.
+                        #- define index <[distances].get[1].get[1]>
+                        #- define item <[targets_list].get[<[distances].get[1].get[1]>]>
+
                         - define elapsed <util.current_time_millis.sub[<[tmp_start]>]>
                         - define elapsed_distance <[elapsed_distance].add[<[elapsed]>]>
 
-
-                        - foreach <[sorted]> as:target :
+                        - foreach <[distances]> as:distance_matrix :
                             - define tmp_start <util.current_time_millis>
+                            - define target <[targets_list].get[<[distance_matrix].get[1]>]>
                             - define target_chest <[target].get[c]>
-                            #- if <proc[is_chest_like].context[<[target_chest]>].not>:
-                            #    # Remove this bad item from the list
-                            #    - run si__remove_mapping def:<player>|<[target_chest]>
-                            #    - foreach next
 
-                            - define target_inventory <[target_chest].inventory>
+                            # not all blocks support power so fall back to 0
+                            # The BLOCK the redstone feeds into (not below the redstone) wills how power level
+                            #    THis works for chest_loc and chest or hopper inventories : <[target_chest]> == power level, often below 15
+                            # Oddly enough the block UNDERNEATH the chest/hopper shows a power level of 15 which makes NO sense
+                            #   <[target_chest].add[0,-1,0]> == 15 (WHY?)
+                            - define is_powered <[target_chest].power.if_null[0]>
+                            - if <[is_powered]> > 0:
+                                #- debug log "<red>Block is powered 0 SKIPPING: <[target_chest]>"
+                                - foreach next
+
+                            # DO a FAST check here to avoid excpetions. If things need repaired that
+                            # can be done with commands. If abuse occurs (not sure I care) we can address that later
+                            - define target_inventory <[target_chest].inventory.if_null[null]>
+                            - if <[target_inventory]> == null:
+                                - debug log "<red>Feeder no longer a valid inventory, removing: <[owner]> -- <[target_chest]>"
+                                - run si__remove_mapping def:<[owner]>|<[target_chest]>
+                                - foreach next
+
+
                             - define space_available <[target_inventory].can_fit[<[feeder_item_name]>].count>
                             - define items_to_move <[space_available].min[<[feeder_item_quantity]>]>
                             - if <[items_to_move]> <= 0 :
@@ -691,17 +728,22 @@ si__process_feeders:
 
 
                             - define counter <[counter].add[1]>
-                            #- debug log "<green>Moving <[feeder_item]> <[items_to_move]>"
-                            #- stop
+                            - debug log "<green>Moving from <[feeder_chest].block> TO <[target_chest].block> ITEM <[feeder_item]> X <[items_to_move]>"
+                            # After moving an item we STOP
+                            - define move_completed true
+                            - foreach stop
+
+                #- stop
 
                 - define ticks_after_move <util.current_time_millis>
                 #- debug log "<red>Elapsed (<[counter]>): <[ticks_after_setup].sub[<[ticks_start]>]>"
-                - debug log "<red>Elapsed (<[counter]>): <[ticks_after_move].sub[<[ticks_start]>]>"
+                - debug log "<red>Elapsed for (<[counter]>) ms: <[ticks_after_move].sub[<[ticks_start]>]>"
                 - debug log "<gold> elapsed_chunk_loaded: <[elapsed_chunk_loaded]>"
                 - debug log "<gold> elapsed_inv: <[elapsed_inv]>"
                 - debug log "<gold> elapsed_distance: <[elapsed_distance]>"
                 - debug log "<gold> elapsed_setup: <[elapsed_setup]>"
                 - debug log "<gold> elapsed_move: <[elapsed_move]>"
+
 
 
 
@@ -722,31 +764,15 @@ si__sort_by_distance:
   definitions: a|b|feeder_loc
   debug: false
   script:
-    - define da  <proc[si__distance].context[<[feeder_loc]>|<[a].get[t]>]>
-    - define db  <proc[si__distance].context[<[feeder_loc]>|<[b].get[t]>]>
+    - define da <[a].get[t].distance[<[feeder_loc]>]>
+    - define db <[b].get[t].distance[<[feeder_loc]>]>
+    - debug log "<green>Distance: <[da]> -- <[db]>"
     - if <[da]>  < <[db]>:
         - determine -1
     - else:
         - if <[da]>  > <[db]>:
             - determine 1
     - determine 0
-
-
-# ***
-# *** get distance beteen a/b suitable for comparison. It does NOT caulcate
-# *** an exact.
-# ***
-# **** Designed to be used by si__srt_by_distance, but accepts normal location data and
-# **** uses internal distance(). In most cases that function is preferred for performance.
-# ***
-# ***
-si__distance:
-  type: procedure
-  definitions: a|b
-  debug: false
-  script:
-    - determine <[a].distance[<[b]>]>
-
 
 # ***
 # *** HELP TEXT
