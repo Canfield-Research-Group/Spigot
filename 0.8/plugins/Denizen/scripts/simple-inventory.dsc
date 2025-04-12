@@ -576,6 +576,9 @@ si__process_feeders:
   debug: false
   definitions: tick_group
   script:
+    - define ticks_start <util.current_time_millis>
+    - define counter 0
+
     - define chunk_cache <map[]>
     - foreach <proc[get_all_players]> as:owner:
         - if <[owner].has_flag[si].not>:
@@ -608,6 +611,8 @@ si__process_feeders:
                     - if !<[c_loaded]>:
                         - foreach next
 
+
+
                 # *** Chunks for source/target are loaded so we can continue
 
                 # Sign/chest chunks are both loaded.
@@ -624,10 +629,13 @@ si__process_feeders:
 
                 # Loop on each item in feeder until SOMETHING can be moved
                 - define feeder_slots <[feeder_inventory].map_slots>
+
+                - define ticks_after_setup <util.current_time_millis>
+
                 - foreach <[feeder_slots]> as:feeder_item key:feeder_slot :
                     # Exit as soon as any item be moved by any quantity
                     - define feeder_item_name <[feeder_item].material.name>
-                    - define feeder_item_count <[feeder_item].quantity>
+                    - define feeder_item_quantity <[feeder_item].quantity>
                     - define items_path si.<[world_name]>.item.<[feeder_item_name]>
                     - define targets_list <[owner].flag[<[items_path]>]||false>
                     - if <[targets_list]>:
@@ -637,42 +645,98 @@ si__process_feeders:
                             - define target_chest <[target].get[c]>
                             - if <proc[is_chest_like].context[<[target_chest]>].not>:
                                 # Remove this bad item from the list
-                                - debug log "<red>Warning: Check inventory at <[target_chest]> not found, removing from Inventory list"
+                                #- debug log "<red>Warning: Check inventory at <[target_chest]> not found, removing from Inventory list"
                                 - run si__remove_mapping def:<player>|<[target_chest]>
                                 - foreach next
 
                             - define target_inventory <[target_chest].inventory>
                             - define target_slots <[target_inventory].map_slots>
-                            - debug log "<red>Feeder Item: <[feeder_item]> --- <[feeder_item_count]> --- Slots: <[feeder_slot]>"
+                            #- debug log "<red>Feeder Item: <[feeder_item]> --- <[feeder_item_count]> --- Slots: <[feeder_slot]>"
                             - define space_available <[target_inventory].can_fit[<[feeder_item_name]>].count>
-                            - debug log "<red>Target: <[target_chest]> --- Avail: <[space_available]> -- Target Slots: <[target_slots]>""
-                            - if <[space_available]> <= <[feeder_item_count]>:
+                            #- debug log "<red>Target: <[target_chest]> --- Avail: <[space_available]> -- Target Slots: <[target_slots]>""
+                            - if <[space_available]> <= <[feeder_item_quantity]>:
                                 - define items_to_move <[space_available]>
                             - else:
-                                - define items_to_move <[feeder_item_count]>
+                                - define items_to_move <[feeder_item_quantity]>
 
                             - if <[items_to_move]> <= 0 :
                                 # No space in the target so continue scanning items
                                 - foreach next
 
+                            # Transfer item
+                            #   Note we need to specify quantity force more than one on TAKE
+                            - take item:<[feeder_item]> quantity:<[items_to_move]> from:<[feeder_chest].inventory>
+                            #- give item:<[feeder_item]> to:<[target_chest].inventory>
+                            - give item:<[feeder_item_name]> quantity:13 to:<[target_chest].inventory>
+                            - stop
 
-                            # Adjust working inventory
-                            - debug log "<red>Quanity to move: <[items_to_move]>"
-                            - debug log "<red>Start Feeder: <[feeder_inventory].map_slots>"
-                            - debug log "<red>Start Target: <[target_inventory].map_slots>"
+                            # *** Test code to
+                            - define test_item i@apple[quantity=24]
+                            - debug log "<red>TEST raw: <[test_item]>"
+
+                            # define test_item <i@%feeder_item%[quantity=%feeder_quantity%]>
+                            - define feeder_item apple
+                            - define feeder_quantity 12
+                            - define item_string <[feeder_item]>[quantity=<[feeder_quantity]>]
+                            - define test_item <item[<[item_string]>]>
+                            - debug log "<red>TEST string: <[test_item]> with <[test_item].quantity>"
+
+                            # Alternate AS syntax
+                            - define feeder_item arrow
+                            - define feeder_quantity 12
+                            # NOTE: Due to parser issues we cannot really combine the building of the string and converting to item in one line
+                            - define test_item <[feeder_item]>[quantity=<[feeder_quantity]>]
+                            - define test_item <[test_item].as[item]>
+                            #- define test_item <[test_item].adjust[quantity:<[feeder_quantity].add[1]>]>
+                            - adjust def:test_item quantity:14
+                            - debug log "<red>TEST as.item: <[test_item]>"
+                            - debug log "<red>TEST as.item: <[test_item]> with <[test_item].quantity>"
+
+                            - debug log "<red>Feeder Chest: <[feeder_chest]>"
+                            # !! take is NOT yet working, it does nto remove anything - Probably because take requires an EXACT match, which
+                            # my code woudl have but this example does not. I am asking for 13 BUT unless the feeder has a lot with
+                            # exactly 13 it will not match.
+                            # BUT instead this eactly matches THEN rmeoves only ONE item. USE .material.name
+                            #- take item:<[test_item]> from:<[feeder_chest].inventory>
+                            # Here we split the options up a bit
+                            - debug log "<red>TAKE : item:<[test_item].material.name> quantity:<[test_item].quantity>"
+                            - take item:<[test_item].material.name> quantity:<[test_item].quantity> from:<[feeder_chest].inventory>
+                            #- take item:arrow quantity:12 from:<[feeder_chest].inventory>
+                            # !!! GIVE works, and item: is optional but I prefer using it
+                            #- give item:<[test_item]> to:<[target_chest].inventory>
+                            # == FAILES: - inventory add <[test_item]> to:<[feeder_chest].inventory>
+                            - stop
+
+
+
+                            # TEST if inventory writes are a problem of the above code
+                            - foreach next
+
+
+                            # === WORKS BUT SLOW
+                            # Adjust working inventory - WORKS BUT SLOW
+                            #- debug log "<red>Quanity to move: <[items_to_move]>"
+                            #- debug log "<red>Start Feeder: <[feeder_inventory].map_slots>"
+                            #- debug log "<red>Start Target: <[target_inventory].map_slots>"
                             - define target_inventory <[target_inventory].include[<[feeder_item_name]>].quantity[<[items_to_move]>]>
                             # Remove from feeder
                             - define feeder_inventory <[feeder_inventory].exclude_item[<[feeder_item_name]>].quantity[<[items_to_move]>]>
 
-                            - debug log "<red>New Feeder: <[feeder_inventory].map_slots>"
-                            - debug log "<red>New Target: <[target_inventory].map_slots>"
+                            #- debug log "<red>New Feeder: <[feeder_inventory].map_slots>"
+                            #- debug log "<red>New Target: <[target_inventory].map_slots>"
 
                             # Apply to game objects
                             - inventory move origin:<[feeder_inventory]> destination:<[feeder_chest].inventory>
                             - inventory move origin:<[target_inventory]> destination:<[target_chest].inventory>
 
-                            - stop
+                            - define end_ticks <util.current_time_millis>
+                            #- define elapsed <[end_ticks].sub[<[start_ticks]>]>
+                            - define counter <[counter].add[1]>
 
+                - define ticks_after_move <util.current_time_millis>
+                - debug log "<red>Elapsed (<[counter]>): <[ticks_after_setup].sub[<[ticks_start]>]>"
+                - debug log "<red>Elapsed (<[counter]>): <[ticks_after_move].sub[<[ticks_after_setup]>]>"
+                - stop
 
 
 # ***
