@@ -30,6 +30,38 @@
 
 # TODO: CHANGE the inventory storage
 #
+#
+#
+# = A refactor is probably needed but watch out for performance
+#    issues with proc calls. They add up. But worse case it's probably one proc per feeder + flag path to use.
+#    Which means task must return a vaue. Looks like we can via determine xxx trhen caller can use the following. AI
+#    suggested this but 'determination' does exist (note this use Robb's Denizen GPT). Review how wildcards affect
+#    the looping before deciding. But it would make overflow easier. Just make it a new list!
+#       - run my_task_script save:result
+#       - define outcome <entry[result].determination>
+#       - narrate "Task returned: <[outcome]>"
+
+# - Suport Round Robin
+#   - ADD disbtruction type to feeder signs. Second line contains '[random]' or '[nearest]' (default)
+#       - Note: Frame Feeders cannot are always nearest
+#       - Future - we may support a x suffix to limit feeder rang to x blocks. Makes everythign a distance. 
+#           - In loop code we can just skip cheststo far away, not worth the cost to rebuild the list since most of the time it will stop on the first match
+#   - Add a new key to feeders 'd' for distribution. It will be 'r' or 'n'. For now just run repair instead of working about backwards compatibility
+#   X change item list sorting to use the new feeder 'd' key to select proper mode
+#
+# - Sign optimizations
+#   - For NORMAL item entries add to the items list. THis is much more performant
+#   - Wildcard are added to the wild card  index and that table is sorted in the same way as the others
+#  
+# - Wildcards
+#   - add wildcard processing that occurs after item processing.
+#
+# - Overflow
+#   - Overflow (overflow) is used if no chest can hold the item. If we refactor code to use a a seperate task for moving
+#   then this is easy. We just call the that ask with the item name overflow. But I am not sure what impact that will have.
+#   Otherwise it is a lot trikier.
+#
+# - Tie into world tick, probably every 4 ticks maybe 8 (like hoppers but full stacks)
 #       - Hoopers run at 2.5 items second so we have a lot of flexibility to be at least this fast
 #           - sorter runs every tick and operates for 1ms max per, then saves state and waits for 1t
 #           - consider running 1 cycle for all feeders and move a STACK (or whatever fits)
@@ -49,7 +81,7 @@
         # - Or we code this ourself?
     # - detect target full and skip it
     # - detect target has redstone ON to it and skip (ie stopped hoppers)
-    # - range limit, closest
+    # X - range limit, closest ( 1.5 > dist < 32)
     # - LONG distance transport: water streams, tricky but works. Easier with bubble elevators (souls and), trains work as well but can be more/less  complex depdnign on route
     #  - Do NOT support interworld inventory or LONG range chaining. Do that the minecraft way. Kepe it simple and clean
 
@@ -606,6 +638,9 @@ si__process_feeders:
     - foreach <proc[get_all_players]> as:owner:
         - if <[owner].has_flag[si].not>:
             - foreach next
+        - if <[owner].flag[si_enabled].if_null[false].not>:
+            - debug log "<red> <[owner]> - Mod disabled"
+            - foreach next
 
         - define world_keys <[owner].flag[si].keys>
         - foreach <[world_keys]> as:world_name:
@@ -670,22 +705,61 @@ si__process_feeders:
                         - define distances <list[]>
                         # Perform a scan to build a list: [[index, distance], ....]
                         #   This calls the slow distance (and skips the proc) once per list (old code was called 6 tiems for 3 elements qsort)
+                        #   The call also gets the plane(s) the. Timing is 154ms for 5,000 elements ==> .031 ms per item. Most item lists will
+                        #   by only a few, but even if 10 that is 0.1 ms and we can round to 1ms and be ok.
                         - foreach <[targets_list]> as:entry key:loop_index :
-                            - define dist <[entry].get[t].distance[<[trigger_loc]>]>
-                            - define distances:->:<list[<[loop_index]>|<[dist]>]>
+                            # THis compares chest inventory block possitions. Note that for double chests this gets a bit
+                            # strange and no effort is made to normalize it. Multiple trigger frame/sign on different parts of a double chest
+                            # will have differnet block positions. That's just the way it is for performance reasons. This may impact
+                            # distances bt (1).
+                            - define planes <map[n=0;e=0;s=0;w=0;u=0;d=0]>
+                            # Block rounding is makes a cleaner distance and plane
+                            - define target_block <[entry].get[c].block>
+                            - define source_block <[feeder_chest].block>
+                            - define dist <[target_block].block.distance[<[feeder_chest].block>]>
+                            # Super easy to filter out here. Tha main list is unchanged but if the indexed list (distances)
+                            # is what is looped on so this is a very effecient way to filte rout before even sorting
+                            #- debug log "<yellow>Checking <[target_block]> WITHIN RANGGE TO <[source_block]> == <[dist]>"
+                            # TIp: Doagnalos should also be skipped , if that is not desired use 1 instead of 1.5
+                            - if <[dist]> <= 32 and <[dist]> > 1.5:
+                                - define dx <[target_block].x.sub[<[source_block].x>]>
+                                - define dy <[target_block].y.sub[<[source_block].y>]>
+                                - define dz <[target_block].z.sub[<[source_block].z>]>
+                                - if <[dz]> < 0:
+                                    - define planes <[planes].with[n].as[1]>
+                                - if <[dz]> > 0:
+                                    - define planes <[planes].with[s].as[1]>
+                                - if <[dx]> > 0:
+                                    - define planes <[planes].with[e].as[1]>
+                                - if <[dx]> < 0:
+                                    - define planes <[planes].with[w].as[1]>
+                                - if <[dy]> > 0:
+                                    - define planes <[planes].with[u].as[1]>
+                                - if <[dy]> < 0:
+                                    - define planes <[planes].with[d].as[1]>
+
+                                - define distances:->:<list[<[loop_index]>|<[dist]>|<[planes]>]>
+                            #- else:
+                            #    - debug log "<red>Skipping <[target_block]> OUT OF RANGE TO <[source_block]> == <[dist]>"
+
                         # Now we want to sort the list using a tag into the each list item, which is itself a list. And in this case a tag of 1 gets the index
                         # TIP: This is useful to remember as it allows list with maps to be sorted by their key as long as the key is a pure numeric or alpah (see sort_by_value)
-                        - define distances <[distances].sort_by_number[2]>
-                        # THis is for benchmark only and is shows HOW to retrive the trigger_list that coresesponds to the sort order
-                        # this lookup is very fast.
-                        #- define index <[distances].get[1].get[1]>
-                        #- define item <[targets_list].get[<[distances].get[1].get[1]>]>
+                        - if <[feeder].get[d].if_null[distance]> == random:
+                             - define sorted <[sorted].random[<[sorted].size>]>
+                        - else:
+                            # Default sort is by distance, 2nd term of distances
+                            - define distances <[distances].sort_by_number[2]>
 
                         - define elapsed <util.current_time_millis.sub[<[tmp_start]>]>
                         - define elapsed_distance <[elapsed_distance].add[<[elapsed]>]>
 
                         - foreach <[distances]> as:distance_matrix :
                             - define tmp_start <util.current_time_millis>
+
+                            # Skip any block that is not at least 1 from the feeder chest, this voids infinite loops
+                            # and assists with chaining.
+                            # Also skip any imventory over X away from trigger inventory
+                            - define distance_from_trigger <[distance_matrix].get[2]>
                             - define target <[targets_list].get[<[distance_matrix].get[1]>]>
                             - define target_chest <[target].get[c]>
 
@@ -710,13 +784,13 @@ si__process_feeders:
 
                             - define space_available <[target_inventory].can_fit[<[feeder_item_name]>].count>
                             - define items_to_move <[space_available].min[<[feeder_item_quantity]>]>
+                            - debug log "<red>Items to move: space: <[space_available]>; feeder: <[feeder_item_quantity]>; To Move: <[items_to_move]>"
                             - if <[items_to_move]> <= 0 :
                                 # No space in the target so continue scanning items
                                 - foreach next
 
                             - define elapsed <util.current_time_millis.sub[<[tmp_start]>]>
                             - define elapsed_setup <[elapsed_setup].add[<[elapsed]>]>
-
 
                             # Transfer item
                             #   Note we need to specify quantity force more than one on TAKE
@@ -725,7 +799,6 @@ si__process_feeders:
                             - give item:<[feeder_item_name]> quantity:<[items_to_move]> to:<[target_chest].inventory>
                             - define elapsed <util.current_time_millis.sub[<[tmp_start]>]>
                             - define elapsed_move <[elapsed_move].add[<[elapsed]>]>
-
 
                             - define counter <[counter].add[1]>
                             - debug log "<green>Moving from <[feeder_chest].block> TO <[target_chest].block> ITEM <[feeder_item]> X <[items_to_move]>"
@@ -782,7 +855,7 @@ si__help:
   type: command
   name: simple_inventory
   description: List or reset simple inventory feeders
-  usage: /simple_inventory [player] [list/clear/rebuild] [rebuild-radius-chunks]
+  usage: /simple_inventory [player] [list/clear/rebuild/enable/disable] [rebuild-radius-chunks]
   permission: simple_inventory.list
   debug: false
   script:
@@ -797,13 +870,17 @@ si__help:
         - define show_help true
     - if <context.args.size> < 2:
         - define show_help true
-    - if <list[list|clear|repair].contains_text[<[command].to_lowercase>].not>:
+    - if <list[list|clear|repair|enable|disable].contains_text[<[command].to_lowercase>].not>:
         - define show_help true
 
     - if <[show_help]>:
         - narrate "<gold>Simple Inventory Help:"
         - narrate "<yellow>/simple_inventory [player] list"
-        - narrate "<gray>  View all active inventory feeders for that player"
+        - narrate "<gray> View all active inventory feeders for that player"
+        - narrate "<yellow>/simple_inventory [player] enable"
+        - narrate "<gray>  Enable plugin for player"
+        - narrate "<yellow>/simple_inventory [player] disable"
+        - narrate "<gray>  Disable inventory handling (only) for player, all data is maintained"
         - narrate "<yellow>/simple_inventory [player] clear"
         - narrate "<gray>  Remove all inventory feeder data"
         - narrate "<yellow>/simple_inventory [player] repair [radius]"
@@ -820,21 +897,33 @@ si__help:
         - stop
     - define owner <[found].get[1]>
 
-    # All commands hae a player component
+    - if <player.is_op.not> and <[owner].uuid> != <player.uuid>:
+        - narrate "<red>Only OPs can specify other players, please use your own name."
+        - stop
+
+    # get current mode
+    - define enabled <[owner].flag[si_enabled].if_null[false]>
+    - if <[enabled]>:
+        - define enable_message "<green>Status: Inventory handling is ENABLED. To disable use:/simple_inventory [name] disable"
+    - else:
+        - define enable_message "<yellow>Status: Inventory handling is DISABLED. To enable use:/simple_inventory [name] enable"
+
+    # All commands have a player component for ease of parsing
     - if <[command]> == list:
         # Using '||' fallback is not reliable in Denizen due to parser limitations
         - if !<[owner].has_flag[si]>:
             - narrate "<gray>No inventory data stored." targets:<player>
-            - stop
-
-        - define inv_map <player.flag[si]>
-        - narrate "<green>Inventory map: <[inv_map]>"
+        - else:
+            - define inv_map <player.flag[si]>
+            - narrate "<green>Inventory map: <[inv_map]>"
+        - narrate <[enable_message]>
         - stop
 
     - if <[command]> == clear:
         - flag <player> si:!
         - narrate "<red>Inventory locations cleared for <[owner]>"
         - narrate "<yellow>Click each sign/frame OR use /simple_inventory <player> repair"
+        - narrate <[enable_message]>
         - stop
 
     - if <[command]> == repair:
@@ -842,6 +931,16 @@ si__help:
         - narrate "<green>Repairing <[radius]> radius chunks around player"
         - run si_repair_triggers_nearby def:<[owner]>|<[radius]>
         - narrate "<yellow>Move to next location and run again"
+        - narrate <[enable_message]>
+        - stop
+
+    - if <[command]> == disable:
+        - flag <[owner]> si_enabled:false
+        - narrate "<yellow>Inventory handling disabled but data will be maintained."
+        - stop
+    - if <[command]> == enable:
+        - flag <[owner]> si_enabled:true
+        - narrate "<green>Inventory handling ENABLED."
         - stop
 
 
@@ -870,8 +969,7 @@ si_repair_triggers_nearby:
             - define offset_z <[z].sub[<[radius].add[1]>]>
             - define cx <[loc].x.add[<[offset_x]>]>
             - define cz <[loc].z.add[<[offset_z]>]>
-            # TODO: I cannot find out quite how to get as[chunk] to work here.
-            - define chunk ch@<[cx]>,<[cz]>,<[loc].world.name>
+            - define chunk chunk[<[cx]>,<[cz]>,<[loc].world.name>]
             - define chunk <[chunk].as[chunk]>
             - define log "CHUNK: <[chunk]>"
             - define area <[chunk].cuboid>
