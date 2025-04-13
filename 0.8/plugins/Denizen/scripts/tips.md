@@ -519,7 +519,7 @@ a log/console entry is made which is really slow and makes the logs messay.
 Tip: Skipping checks for existance or other attributes may allow for a significant performance boost and reliability assuming the failure case
 is fraction of the normal case. Otherwise benchmark code to see if pre-checking or exception is better.
 
-Note: THe legacy mechanism was to use `||null` (or any other defualt). For example: `define target_inventory <[target_chest].inventory.||null>`.
+Note: The legacy mechanism was to use `||null` (or any other defualt). For example: `define target_inventory <[target_chest].inventory.||null>`.
 That may still be required in some cases but Denizen documentation seems to favor using the `.if_null` even if all the documentation has not
 been updated to reflect that.
 
@@ -530,3 +530,99 @@ been updated to reflect that.
         - stop
 ```
 
+###	Tag Fallbacks
+
+Reference: https://meta.denizenscript.com/Docs/Search/fallback and copied to below
+
+NOTE: Please suggest using the newer form such as `.if_null[null]` instead of `||null` unless tne newer form is NOT supported for your specific case.
+
+Description	Tag fallbacks (AKA "tag alternatives") are a system designed to allow scripters to automatically handle tag errors.
+
+Fallbacks are implemented as special "magic tags" that look like any other tag-part, but override the error handler. These are "if_null", "exists", and "is_truthy".
+
+A tag without a fallback might look like "<player.name>".
+This tag works fine as long as there's a linked player, but what if a player isn't always available?
+Normally, this situation would display an error in the console debug logs, and return plaintext "player.name" in the script.
+A fallback can help us handle the problem more gracefully.
+That same tag with a fallback would look like "<player.name.if_null[Steve]>".
+Now, when there isn't a player available, there will not be an error, and the tag will simply return "Steve".
+
+This format is the same for basically all tags. "<main.tag.here.if_null[Fallback here]>".
+For another example, "<player.flag[myflag].if_null[0]>" returns either the value of the flag, or "0" if the flag is not present (or if there's no player).
+
+The "exists" fallback-tag is available for checking whether an object exists and is valid.
+What if we want to check if there even is a linked player? We don't have a "<has_player>" tag to do that, so what can we do?
+
+- if <player.exists>:
+
+The above example demonstrates using a fallback to check if a player is valid.
+The if block will run only if there is not a player valid (you might, for example, place the "stop" command inside).
+
+"Exists" is useful when you *only* need a check, however you often need to grab a value and verify it after.
+Consider the following example, often found in command scripts:
+
+
+- define target <server.match_player[<context.args.get[1]>].if_null[null]>
+- if <[target]> == null:
+    - narrate "<&[error]>Invalid player!"
+    - stop
+- narrate "<&[base]>You chose <&[emphasis]><[target].name><&[base]>!"
+
+We use the word "null" in the above example, as well as in the tag name itself. This is a common programming term that means "no object is present".
+"if_null" is the actual tag name, however the input value of "null" isn't actually a functionality of Denizen, it's just a word we choose for clarity.
+You could just as easily do "- if <player.if_null[nothing]> == nothing:", or for that matter "- if <player.if_null[cheese]> == cheese:".
+A player object takes the form "p@uuid", so it will therefore never exactly match any simple word, so there's no coincidental match edge-case to worry about.
+Note that this won't work so perfect for things like a user input or fully dynamic value,
+so in those cases you may want to use the "exists" tag explicitly to guarantee no potential conflict.
+
+Fallbacks can be tags themselves. So, for example, if we want either a custom flag-based display name, or if not available, the player's base name,
+we can do: "<player.flag[display_name].if_null[<player.name>]>".
+You can as well chain these: "<player.flag[good_name].if_null[<player.flag[bad_name].if_null[<player.name>]>]>".
+
+Note that fallbacks will *hide errors*. Generally, the only errors you should ever hide are ones you're expecting that are fine.
+Don't use a fallback on a "<player.name>" tag, for example, if there should always be a player present when the script runs.
+That tag should only ever have a fallback when the script is meant to still work without a player attached.
+If you carelessly apply fallbacks to all tags, you might end up not realizing there's a problem in your script until it's affecting real players.
+You want to solve errors in testing, not ten months later when a player mentions to you "that shop NPC let me buy things even when I had $0"!
+
+Prior to Denizen 1.2.0, fallbacks exclusively worked with a special "||" syntax, like "- if <player||null> == null:"
+This syntax is still fully supported at time of writing, however the newer tag-based format is considered clearer and easier to learn.
+
+
+
+## Single line IF Commands deprecated
+
+Can you remember that we should not combine IF and actions per:
+- if <[dz]> < 0>: define planes <[planes].with[N].as[1]>
+
+Error Message: Single line if commands are deprecated. Please update them to modern format (note: By deprecated they mean NO LONGER SUPPORTED)
+
+Instead use:
+- if <[dz]> < 0>:
+  - define planes <[planes].with[N].as[1]>
+
+## Optimize for ++, --, etc.
+
+Some common operations can be optimized. For example
+- define counter <[counter].add[1]>
+
+Is optimized via. Benchmarks indicate there is very little, if any, performance difference but
+it is easier to read. Also note that the definition (aka variable name) is a LITERAL text liek a normal define.
+
+- define counter:++
+
+This increments counter by 1 without needing to use .add[1].
+This syntax is part of Data Actions, which allow quick and expressive value modifications:
+
+- ++ → increment
+- -- → decrement
+- ! → remove
+- +:<value> → add value
+- -:<value> → subtract value
+
+Examples:
+
+- define x:++       # x becomes 1
+- define y:+:3      # y becomes y + 3
+
+Source: Denizen Documentation → Data Actions (language) section​.
