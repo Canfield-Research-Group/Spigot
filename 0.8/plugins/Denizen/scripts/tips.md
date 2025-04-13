@@ -626,3 +626,53 @@ Examples:
 - define y:+:3      # y becomes y + 3
 
 Source: Denizen Documentation → Data Actions (language) section​.
+
+
+## Queue stop vs stop
+
+Name	Queue
+Using the "stop" argument will force the queue to immediately stop running.
+When trying to stop the current queue, use Command:stop instead.
+
+Using the "delay:<duration>" argument will cause the queue to wait for a specified duration.
+When trying to delay the current queue, use Command:wait instead.
+
+Using the "pause" argument will freeze the queue but keep it listed, waiting for a "resume" instruction.
+It is of course not possible to resume the current queue (as if you're running a 'queue' command, the queue can't be paused).
+
+Generally, the queue command are considered a non-ideal way of doing things - that is, there's usually a better/cleaner way to achieve similar results.
+
+
+See also Denizen Documentation for `Queue` at https://meta.denizenscript.com/Docs/Search/queue
+
+
+## Create script constants
+
+There are not really constants in Denzien but you can get pretty close by use a type:data script and a basic hierarchial stucture.
+
+Example:
+
+```denizen
+si_config:
+  type: data
+  data:
+    feeder:
+        # Feeder location data (trigger) is proccessed every x ticks where the x is calculated
+        # by a simple hash that when moded by tick_delay being zero the feeder is processed.
+        #   Use 0 to fire every tick, useful for debugging
+        tick_delay: 0
+        max_slots: 1
+        max_items: 64
+        # 10 chunks which
+        max_distance: 32
+```
+
+And the usage:
+
+- define max_items <script[si_config].data_key[data].get[feeder].get[max_items]>
+
+This can be broken down into:
+
+- `script[si_config]` creates a script object. This could be assigned to a variable if desired, but many times that is not needed
+- `data_key[data]` The data_key is used to fetch data from a script, in this case the 'data:' element. But there are many other per the `ScriptTag` in Denzien documentation
+- `get[feeder].get[max_items]` - The data is a map, and as such you need to walk down the structure using multiple `get`, optionall ening with `.if_null[a-default]`
