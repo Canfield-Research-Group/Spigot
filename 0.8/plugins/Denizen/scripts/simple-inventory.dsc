@@ -323,36 +323,33 @@ si__add_mapping:
     # Build flag path
     - define flag_root <proc[si__flag_path].context[<[trigger_loc]>]>
 
+    - define trigger_log <[trigger_loc].block>
+    - define chest_log <[chest_loc].block>
+
     # if a Feeder then by indexed by LOCATION
     - if <[is_feeder]>:
         # Optimize for feeder, all we need are feeder/chest location
         - define entry <map[t=<[trigger_loc]>;c=<[chest_loc]>;d=<[max_distance]>;s=<[sort_order]>;f=<[facings]>;e=<[is_entity]>]>
-        - define flag_feeders <[flag_root]>.feeder
-        - flag <[player]> <[flag_feeders]>:->:<[entry]>
+        - flag <[player]> <[flag_root]>.feeder:->:<[entry]>
     - else:
         - if <[item]>:
             # ** ITEMS indexed by item name. Minimmal item settings, no need to keep name as that is in the index
             - define item_list <[item].as[list]>
             - foreach <[item_list]> as:entry:
                 - define entry <map[t=<[trigger_loc]>;c=<[chest_loc]>;i=<[item]>;w=0;e=<[is_entity]>]>
-                - define flag_loc <[flag_root]>.item.<[item]>
-                - flag <[player]> <[flag_loc]>:->:<[entry]>
+                - flag <[player]> <[flag_root]>.item.<[item]>:->:<[entry]>
         - if <[wildcard]>:
             # ** wildcards are a advanced_match string (not an array)
             - define entry <map[t=<[trigger_loc]>;c=<[chest_loc]>;w=<[wildcard]>;i=0;e=<[is_entity]>]>
-            - define flag_loc <[flag_root]>.wildcard
-            - flag <[player]> <[flag_loc]>:->:<[entry]>
+            - flag <[player]> <[flag_root]>.wildcard:->:<[entry]>
         - if <[overflow]>:
             # ** Overflow is just a boolean, if true then ADD to the oveflow flags
             - define entry <map[t=<[trigger_loc]>;c=<[chest_loc]>;e=<[is_entity]>]>
-            - define flag_loc <[flag_root]>.overflow
-            - flag <[player]> <[flag_loc]>:->:<[entry]>
+            - flag <[player]> <[flag_root]>.overflow:->:<[entry]>
 
 
     - define end_ticks <util.current_time_millis>
     - define duration_millis <[end_ticks].sub[<[start_ticks]>]>
-
-    - define data <[player].flag[<[flag_root]>.item.cobblestone]>
     - determine true
 
 
@@ -373,29 +370,25 @@ si__remove_mapping:
     # location, This works for sings, frames and changing frame items.
     #  TODO: This check feels hacky, but not totlaly out of Denizen scope
     - if <[trigger_loc].location.if_null[null]> == null:
-        - define search_loc <[trigger_loc]>
+        - define search_loc <[trigger_loc].block>
     - else:
-        - define search_loc <[trigger_loc].location>
+        - define search_loc <[trigger_loc].location.block>
 
     - define flag_root <proc[si__flag_path].context[<[search_loc]>]>
 
     # Remove items, these are indexed by NAME, then a list of maps with t=target location (full)
-    - define flag_path <[flag_root]>.item
-    - if <[player].has_flag[<[flag_path]>]>:
+    - if <[player].has_flag[<[flag_root]>.item]>:
         # Each item as it's on list scan. A bit slow but it is safe. This is only
         # done on changes to frames/signs or whatever feeders
-        - define item_names <[player].flag[<[flag_path]>].keys>
+        - define item_names <[player].flag[<[flag_root]>.item].keys>
         - foreach <[item_names]> as:item_name :
-            - define flag_path_data <[flag_path]>.<[item_name]>
-            - run si__remove_locations def:<[player]>|<[flag_path_data]>|<[search_loc]>
+            - run si__remove_locations def:<[player]>|<[flag_root]>.item.<[item_name]>|<[search_loc]>
 
     # Remove Wildcard / groups which are not indexed, just a list of maps
-    - define flag_path_data <[flag_root]>.wildcard
-    - run si__remove_locations def:<[player]>|<[flag_path_data]>|<[search_loc]>
+    - run si__remove_locations def:<[player]>|<[flag_root]>.wildcard|<[search_loc]>
 
     # Remove Feeders which ar eno indexed, just a list of maps. Usually under 20 or so
-    - define flag_path_data <[flag_root]>.feeder
-    - run si__remove_locations def:<[player]>|<[flag_path_data]>|<[search_loc]>
+    - run si__remove_locations def:<[player]>|<[flag_root]>.feeder|<[search_loc]>
 
 # ***
 # *** Remove all entries that match the target key (t) from the list specified by the flag path
@@ -407,7 +400,7 @@ si__remove_locations:
 
     # THis method is likley faster for cases needing multiple deletes, RARE.
     - if <[player].has_flag[<[flag_path]>]>:
-        - define trigger_block <[trigger_loc]>
+        - define trigger_block <[trigger_loc].block>
 
         # = DEPRECATED : This works but is 3ms for 40 chests and one or zero duplicates. Which is the norm
         #- define keep_entries <[player].flag[<[flag_path]>].filter_tag[<[filter_value].get[t].equals[<[trigger_loc]>].not>]>
@@ -417,11 +410,11 @@ si__remove_locations:
         # THis method is likley faster for cases needing one or zero deletes, COMMON
         # = Loop is faster, about 1ms for 40 chests
         - define found_entries <[player].flag[<[flag_path]>].filter_tag[<[filter_value].get[t].equals[<[trigger_block]>]>]>
+        - stop
         - foreach <[found_entries]> as:entry :
             #- debug log "<red>REMOVING entry: <[entry]>"
             - define remove_flag true
             - flag <[player]> <[flag_path]>:<-:<[entry]>
-
 
 # ***
 # *** Build base flag path to root of invenotory based ona location string
@@ -717,7 +710,6 @@ si__process_feeders:
     - define bad_chest <location[1809,119,-1272,world]>
 
     - define feeder_constants <script[si_config].data_key[data].get[feeder]>
-    # Used 
     - define feeder_tick_delay <[tick_delay].if_null[<[feeder_constants].get[tick_delay]>]>
     - define min_distance <[feeder_constants].get[min_distance]>
     - define max_distance <[feeder_constants].get[max_distance]>
@@ -735,6 +727,10 @@ si__process_feeders:
 
     # Build a list of all feeders for all players
     - define all_worlds <server.worlds>
+
+    # Diag logs are always built from scratch then updated when all processing is done this pass
+    #   This eliminates any GC issues
+    - define diag_log <map[]>
 
     # Loop on each world and limit processing per world
     - foreach <[all_worlds]> as:world:
@@ -769,8 +765,11 @@ si__process_feeders:
         - foreach <[feeder_master_list]> as:feeder_to_process :
             - define owner <[feeder_to_process].get[1]>
             - define feeder <[feeder_to_process].get[2]>
+            - define diag_key <[owner].name>.<[world_name]>.<[feeder].get[t].block>
+            - define diag_state "not processed"
+            - define diag_log <[diag_log].deep_with[<[diag_key]>].as[<[diag_state]>]>
 
-            # Whent his becomes true the current feeder is DONE
+            # When this becomes true the current feeder is DONE
             - define move_completed false
 
             # Check feeder location (trigger)
@@ -786,6 +785,8 @@ si__process_feeders:
             # If feeder chest is powered skip it
             - define is_powered <proc[powerlevel_blocks].context[<[feeder_chest]>]>
             - if <[is_powered]> > 0:
+                - define diag_state "powered, ignored"
+                - define diag_log <[diag_log].deep_with[<[diag_key]>].as[<[diag_state]>]>
                 - foreach next
 
             # ** Sign/chest chunks are both loaded.
@@ -806,6 +807,8 @@ si__process_feeders:
 
             # Scan feeder chest until a move is found, quickly skipping items already identied as haveing no available target
             - define feeder_skip_next_time <list[]>
+            - define diag_state "feeder empty"
+            - define diag_log <[diag_log].deep_with[<[diag_key]>].as[<[diag_state]>]>
             - foreach <[feeder_slots]> as:feeder_item :
                 # THis seems like a good time to wait,  after all init AND before moves start. This loop
                 - define process_runtime <util.current_time_millis.sub[<[start_time]>]>
@@ -830,14 +833,16 @@ si__process_feeders:
                 ## Remember that this item WAS processed and as such should be skipped if seen again for this chest
                 #- define feeder_skip_next_time:->:<[feeder_item_name]>
 
-
-                - define diagnostics "<gold>No matching target container found for <[feeder_item_name]>."
-                - define feeder_state notfound
+                # Set a default
+                - define diag_state "target not found for: <[feeder_item_name]>."
+                # VSCode may not know about deep_with
+                - define diag_log <[diag_log].deep_with[<[diag_key]>].as[<[diag_state]>]>
 
                 # Loop through each available list, each list is tried before moving to the next
-                # = *** Limit LIST to scan to 'item' during debugging, allow others as testing completes
+                # === *** Limit LIST to scan to 'item' during debugging, allow others as testing completes
                 - define target_list_names <list[item|wildcard|overflow]>
                 - define target_list_names <list[item]>
+
                 - foreach <[target_list_names]> as:list_name :
                     - if <[move_completed]>:
                         - foreach stop
@@ -943,37 +948,26 @@ si__process_feeders:
                         - define items_to_move <[space_available].min[<[feeder_item_quantity].min[<[max_quantity]>]>]>
                         - if <[items_to_move]> <= 0 :
                             # No space in the target so continue scanning items
-                            - define diagnostics "<gold>Found matching target(s) for <[feeder_item_name]> but they are full."
-                            - define feeder_state full
+                            - define diag_state "targets full: <[feeder_item_name]>."
+                            - define diag_log <[diag_log].deep_with[<[diag_key]>].as[<[diag_state]>]>
                             - foreach next
 
 
                         # All OK, initiate a move
-                        - define diagnostics "<green>Allowed <[feeder_item]>X<[items_to_move]> FROM <[feeder_chest].block> TO <[target_chest].block>"
-                        - define feeder_state move
-                        # == DEBUG
-                        - debug log <[diagnostics]>
-
+                        - define diag_state "Moving: <[items_to_move]> <[feeder_item_name]> TO <[target_chest].block>"
+                        - define diag_log <[diag_log].deep_with[<[diag_key]>].as[<[diag_state]>]>
 
                         # Transfer item
                         #   Note we need to specify quantity force more than one on TAKE
                         - take item:<[feeder_item_name]> quantity:<[items_to_move]> from:<[feeder_chest].inventory>
                         - give item:<[feeder_item_name]> quantity:<[items_to_move]> to:<[target_chest].inventory>
-
                         - define counter <[counter].add[1]>
-
-                        # After moving an item we STOP, turn this off to continue processing items until move complected
-                        # is done.
-                        #   For fairness this is NOT allowed this since it is hard to distribute slots so its possible to process
-                        #   a double chest, fail all matches and that will take 48ms. Worse case, but not desirerable.
+                        # This is used to allow a more intelligent loop exit logig that can leave multiple levels base don logic
                         - define move_completed true
                         - foreach stop
 
-
-
-
-
-
+    # Record all logs for player for use in player diagnostics
+    - flag server si_diag:<[diag_log]>
 
 
 # ***
@@ -1010,7 +1004,7 @@ si__help:
   type: command
   name: simple_inventory
   description: List or reset simple inventory feeders
-  usage: /simple_inventory [player] [list/clear/rebuild/enable/disable] [rebuild-radius-chunks]
+  usage: /simple_inventory [player] [list/clear/rebuild/enable/disable/diag] [rebuild-radius-chunks]
   permission: simple_inventory.list
   debug: false
   script:
@@ -1025,7 +1019,7 @@ si__help:
         - define show_help true
     - if <context.args.size> < 2:
         - define show_help true
-    - if <list[list|clear|repair|enable|disable].contains_text[<[command].to_lowercase>].not>:
+    - if <list[list|clear|repair|enable|disable|diag].contains_text[<[command].to_lowercase>].not>:
         - define show_help true
 
     - if <[show_help]>:
@@ -1040,7 +1034,9 @@ si__help:
         - narrate "<gray>  Remove all inventory feeder data"
         - narrate "<yellow>/simple_inventory [player] repair [radius]"
         - narrate "<gray>  Scan signs/frames around player to rebuild flags"
-        - narrate "<yellow>Default radius is <white>5<yellow> chunks."
+        - narrate "<gray>  Default radius is <white>5<yellow> chunks."
+        - narrate "<yellow>/simple_inventory [player] diag"
+        - narrate "<gray>  Show last status of feeders"
         - stop
 
     # Match_offline_ wills earch for online/offline by a case insensitive flexible matching.
@@ -1097,6 +1093,17 @@ si__help:
         - flag <[owner]> si_enabled:true
         - narrate "<green>Inventory handling ENABLED."
         - stop
+
+    - if <[command]> == diag:
+        # per Player
+        - define changes false
+        - define owner_name <[owner].name>
+        - define diag_key si_diag
+        - define log_player <server.flag[si_diag.<[owner_name]>]>
+        - foreach <[log_player]> key:world as:feeders :
+            - narrate "<gold><[owner_name]> / <[world]>" targets:<[owner]>
+            - foreach <[feeders]> key:feeder_loc as:status :
+                - narrate "<green><[feeder_loc]> : <[status]>" targets:<[owner]>
 
 
 # ***
