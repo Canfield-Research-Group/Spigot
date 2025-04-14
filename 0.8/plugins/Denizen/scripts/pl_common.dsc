@@ -94,3 +94,17 @@ debug_cleanup_malformed_flags:
             - debug log "<red>Removing malformed flag for user <[player]>: <[flagname]>"
             # Unescape INLINE to avoid quoting
             - flag <[player]> <[rawflag].unescaped>:!
+
+# ***
+# *** Is powered?
+# *** Returns power level for block. If block is a double block, like a chest, returns
+# *** The (max) power level of the blocks.
+# ***
+powerlevel_blocks:
+  type: procedure
+  debug: false
+  definitions: block
+  script:
+    #  Use fallbacks is usually faster than lots of checks
+    - define other_block <[block].other_block.if_null[<[block]>]>
+    - determine <[block].power.if_null[0].max[<[other_block].power.if_null[0]>]>

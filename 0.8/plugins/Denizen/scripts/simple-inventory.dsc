@@ -736,21 +736,10 @@ si__process_feeders:
                 - if <[feeder_chest].chunk.is_loaded.not>:
                     - foreach next
 
-
                 # If feeder chest is powered skip it
-                - define is_powered <[feeder_chest].power.if_null[0]>
+                - define is_powered <proc[powerlevel_blocks].context[<[feeder_chest]>]>
                 - if <[is_powered]> > 0:
-                    - debug log "<red>FEEDER is powered 0 SKIPPING: <[feeder_chest]>"
                     - foreach next
-
-                
-                # TEST for double chest - needs validation
-                #- if <[inv].type> == double_chest:
-                #    - define other_half <[chest_loc].other_block>
-                #    - define is_powered <[chest_loc].power||0>.max[<[other_half].power||0>]>
-                #- else:
-                #    - define is_powered <[chest_loc].power||0>
-
 
 
                 # ** Sign/chest chunks are both loaded.
@@ -895,9 +884,8 @@ si__process_feeders:
                             #    THis works for chest_loc and chest or hopper inventories : <[target_chest]> == power level, often below 15
                             # Oddly enough the block UNDERNEATH the chest/hopper shows a power level of 15 which makes NO sense
                             #   <[target_chest].add[0,-1,0]> == 15 (WHY?)
-                            - define is_powered <[target_chest].power.if_null[0]>
+                            - define is_powered <proc[powerlevel_blocks].context[<[target_chest]>]>
                             - if <[is_powered]> > 0:
-                                #- debug log "<red>Block is powered 0 SKIPPING: <[target_chest]>"
                                 - foreach next
 
                             # DO a FAST check here to avoid excpetions. If things need repaired that
