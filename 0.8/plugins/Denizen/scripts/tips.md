@@ -758,3 +758,12 @@ powerlevel_blocks_b:
     - determine <[is_powered]>
 
 ```
+
+
+### Command Corrections
+
+The following commands are often suggested but are wrong. This table shows the modern command
+
+| Deprecated Command | Working Command | Reference |
+| -------------------| --------------- | --------- | 
+| server.list_worlds | server.worlds | https://meta.denizenscript.com/Docs/Search/worlds#server.worlds |

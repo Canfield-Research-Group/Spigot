@@ -108,3 +108,34 @@ powerlevel_blocks:
     #  Use fallbacks is usually faster than lots of checks
     - define other_block <[block].other_block.if_null[<[block]>]>
     - determine <[block].power.if_null[0].max[<[other_block].power.if_null[0]>]>
+
+
+# ***
+# *** should_run_this_tick
+# *** Returns true if the current server tick matches this location's tick group.
+# ***
+# *** Spreads work across ticks by hashing the X/Y/Z of a LocationTag and comparing
+# *** the result against the current tick modulo group size.
+# ***
+# *** PARAMETERS:
+# *** location     - A LocationTag (must include world)
+# *** group_size   - Number of ticks over which to spread processing (e.g., 8)
+# ***
+# *** RETURNS:
+# *** true or false (Boolean) — true if this tick is the correct one for this location
+# ***
+# *** EXAMPLE:
+# *** - if <proc[should_run_this_tick].context[<[location]>|8]>:
+# ***     - ... process logic
+# ***
+should_run_this_tick:
+  type: procedure
+  definitions: location|group_size
+  debug: false
+  script:
+    - define x <[location].x.round>
+    - define y <[location].y.round>
+    - define z <[location].z.round>
+    - define hash <[x].mul[31].add[<[y].mul[13]>].add[<[z].mul[7]>]>
+    - define tick_group <[hash].mod[<[group_size]>]>
+    - determine <[tick_group].is[==].to[<util.current_tick.mod[<[group_size]>]>]>
