@@ -11,11 +11,14 @@ often nearby to the fail example.
 When recomending suggestions pay special attention the deprecation section for any command. If such a section is found
 be sure to recomend or suggest using the modern version. For example the 'as_list' section specifies:
 
-- Deprecated	use as[list]
+- Deprecated, use as[list]
 
 In this case any use of `as_list` should recomend `.as[list]`.
 
 Most object notation have a more modern `.as[object-type]`, see the 
+
+
+Prompt: Favor any uploaded documents over existing data when offering advice or suggestions.
 
 Credit: While most of this document was created by Robb@canfield.com, some sections were copied based on AI conversations,
 cross checked and usually tested, then edited and formatted.
@@ -95,6 +98,30 @@ Note: Internally the Denizen btye codelike interpretor may well cache and manipu
 code (maps and lists) the user interaction is ALWAYS text.
 
 See also: Escaping System in Denizen documentation
+
+
+### Parsing
+
+Denizen parses each line (except comments) rerursively frrom innermost to outermost.
+
+- find all <..> from deepest to outermost and evaluate, returning the results as text and inserted into the result.
+- Each is resolved as parsed and the results inserted as TEXT
+- Contrived Example Parsed: `define result <[my_data].get[3].if_null[<[feeder_chest].inventory>]>`
+    - 1. Deepest '<...>' : `<[feeder_chest].inventory>`
+    - 2. this is evaluted as and processed resulting in an invtory list. Note this happens ALWAYS
+    - 3. The [my_data].get[3].if_null[-the-invetory-result-from-above]
+        - And will return either the 3rd element from the [my_data] OR the reslt of the `.inventory`
+    - Lessons learned: The operation will suffer all side effects of all nested <...> without
+    regard to surrounding elements. So in this case '<[feeder_chest].inventory>` is performend always,
+    at whatever performance cost or other side effects.
+
+Another example:
+
+- `define result <[my_data].get[3].if_null[list[]]>`
+- This parse as a single operation  if the if_null returning a LITERAL 'list[]' not resolved since it is not wrapped in <...>
+- FIX: `define result <[my_data].get[3].if_null[<list[]>]>` which WILL resolve to @li and use that if the get[3] is null.
+
+
 
 ## Inline Debugging
 
@@ -530,6 +557,19 @@ been updated to reflect that.
         - stop
 ```
 
+### Using objects for fallback
+
+When using a fallback command it is important to properly evaluate the contents.
+
+- BAD: <[my_list].get[2].if_null[list[]]>
+    - This resolves to the literal string 'list[]' which is NOT usually desired
+- OK: <[my_list].get[2].if_null[@li]>
+    - Not recomended as it is older syntax and using direct object notation is no longer recomended. Recall
+    that all objects in Denizen are actually strings that are resolved by Denizen internals as needed and often
+    intellignetly cached for performance. Normally developers do not need to be concerned unless benchmarks show a performance issue
+- BEST: <[my_list].get[2].if_null[<[list[]]]>
+    - The '<...>' is needed around the `list[]` (or whatever object is desired) to resolve this to an actual list and not treat as a literal
+
 ###	Tag Fallbacks
 
 Reference: https://meta.denizenscript.com/Docs/Search/fallback and copied to below
@@ -669,10 +709,52 @@ si_config:
 
 And the usage:
 
-- define max_items <script[si_config].data_key[data].get[feeder].get[max_items]>
+- define max_items `<script[si_config].data_key[data].get[feeder].get[max_items]>`
 
 This can be broken down into:
 
 - `script[si_config]` creates a script object. This could be assigned to a variable if desired, but many times that is not needed
 - `data_key[data]` The data_key is used to fetch data from a script, in this case the 'data:' element. But there are many other per the `ScriptTag` in Denzien documentation
 - `get[feeder].get[max_items]` - The data is a map, and as such you need to walk down the structure using multiple `get`, optionall ening with `.if_null[a-default]`
+
+
+## Double Chest Nuances
+
+Double blocks can present some interesting probles. For example when checking a block location of a double chest only the
+specific block being checked contrinutes to the result. To manage a double block the following can be used, while
+only tested on chests this should work on any double block. The key is to use '.other_block'.
+ 
+This is a simple clean method, but may not be optimal. It uses fallbacks which are normally pretty quick. The
+procedure returns greatest power level.
+
+ ```denizen
+powerlevel_blocks:
+  type: procedure
+  debug: false
+  definitions: block
+  script:
+    #  Use fallbacks is usually faster than lots of checks
+    - define other_block <[block].other_block.if_null[<[block]>]>
+    - determine <[block].power.if_null[0].max[<[other_block].power.if_null[0]>]>
+```
+
+This example is more verbose but is 4x slower than above.  This
+procedure also returns greatest power level.
+
+```denizen
+powerlevel_blocks_b:
+  type: procedure
+  debug: false
+  definitions: chest_loc
+  script:
+    - define chest_block <[chest_loc].material>
+    - define inv <[chest_loc].inventory>
+
+    - define other_half <[chest_loc].other_block.if_null[null]>
+    - if <[other_half]> != null:
+        - define is_powered <[chest_loc].power.if_null[0].max[<[other_half].power.if_null[0]>]>
+    - else:
+        - define is_powered <[chest_loc].power.if_null[0]>
+    - determine <[is_powered]>
+
+```
