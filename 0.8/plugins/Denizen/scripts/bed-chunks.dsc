@@ -97,8 +97,8 @@ bed_enable_chunkloader_for_player:
   definitions: owner
   script:
     # Block radius around bed (should match default_radius)
-    - define bed_loc <[owner].bed_spawn>
-    - if <[bed_loc]||null> == null:
+    - define bed_loc <[owner].bed_spawn.if_null[null]>
+    - if <[bed_loc]> == null:
         - stop
 
     - define start_time <util.current_time_millis>
