@@ -41,17 +41,17 @@
 #       - define outcome <entry[result].determination>
 #       - narrate "Task returned: <[outcome]>"
 
-# - Suport Round Robin
-#   - ADD disbtruction type to feeder signs. Second line contains '[random]' or '[nearest]' (default)
-#       - Note: Frame Feeders cannot are always nearest
-#       - Future - we may support a x suffix to limit feeder rang to x blocks. Makes everythign a distance. 
-#           - In loop code we can just skip cheststo far away, not worth the cost to rebuild the list since most of the time it will stop on the first match
-#   - Add a new key to feeders 'd' for distribution. It will be 'r' or 'n'. For now just run repair instead of working about backwards compatibility
+# x Suport Round Robin
+#   x ADD disbtristbution type to feeder signs. Second line contains '[random]' or '[nearest]' (default)
+#       x Note: Frame Feeders cannot are always nearest
+#       ? (WIP) Future - we may support a x suffix to limit feeder rang to x blocks. Makes everythign a distance. 
+#           x In loop code we can just skip cheststo far away, not worth the cost to rebuild the list since most of the time it will stop on the first match
+#   x Add a new key to feeders 'd' for distribution. It will be 'r' or 'n'. For now just run repair instead of working about backwards compatibility
 #   X change item list sorting to use the new feeder 'd' key to select proper mode
 #
 # - Sign optimizations
-#   - For NORMAL item entries add to the items list. THis is much more performant
-#   - Wildcard are added to the wild card  index and that table is sorted in the same way as the others
+#   x For NORMAL item entries add to the items list. THis is much more performant
+#   x Wildcard are added to the wild card  index and that table is sorted in the same way as the others
 #  
 # - Wildcards
 #   - add wildcard processing that occurs after item processing.
@@ -144,16 +144,6 @@ si__sign_or_frame_events:
     # - EVENT: on/after player cha nges sign : WORKS
 
 
-    # == Changes Sign
-    after player changes sign:
-        - define loc <context.location||null>
-        - if <[loc]> != null :
-            - define details <proc[si__parse_sign].context[<player>|<[loc]>]>
-            - if <[details].get[message]>:
-                - narrate <[details].get[message]>
-            - run si__add_mapping def:<player>|<[details]>
-
-
     # === Right click on item frame
     # This just allows the open chest mechanism for frames. The actual inventory managment handling
     # is handled via 'changes framed item'. WE do do a repair here just in case
@@ -167,9 +157,12 @@ si__sign_or_frame_events:
             - narrate <[details].get[message]>
 
         # an auto repair, in case something went wrong, this should not impact performance in any meaningful way
+        #     allow chest sbehind signs NOT part of inevntory system to be opened
         - define chest <[details].get[chest]>
         - if <[chest]>:
-            - run si__add_mapping def:<player>|<[details]>
+            - if <[details].get[trigger]>:
+                - run si__add_mapping def:<player>|<[details]>
+
             - run open_chest_gui def:<player>|<[chest]>
             - determine cancelled
         - else:
@@ -206,34 +199,41 @@ si__sign_or_frame_events:
 
 
     # === Right click on sign
-    on player right clicks block:
+    on player right clicks *_sign:
         # make sure location is defined, if not then exit now (sucha s right clicking in air and SPigot/purpur routed it to 'clocks blokc' event' event anyway)
         # Exit as quick as possible if this event is not applicable (crouching bypasses the override)
         - define loc <context.location||null>
+        - if <[loc]> == null:
+            - stop
 
         # Sneaking and right click lets you edit a sign SOMETIMES but it is NOT reliable, it was a few hour ago. Not sure what's up with that
         # in any case we need a bypass so stick allows edit
         - if <player.is_sneaking> || <player.item_in_hand.material.name> == stick:
             - stop
 
-        - if <[loc]> == null:
-            - stop
-
         - define details <proc[si__parse_sign].context[<player>|<[loc]>]>
         - if <[details].get[message]>:
             - narrate <[details].get[message]>
 
-        - define feeder <[details].get[trigger]>
-        - if !<[feeder]>:
-            - stop
-
         # an auto repair, in case something went wrong, this should not impact performance in any meaningful way
         - run si__add_mapping def:<player>|<[details].escaped>
+
+        # now check the chest, which will ALWAYS be set if if not a special sign
         - define chest <[details].get[chest]>
         - if <[chest]>:
             - run open_chest_gui def:<player>|<[chest]>
 
         - determine cancelled
+
+
+    # == Changes Sign
+    after player changes sign:
+        - define loc <context.location||null>
+        - if <[loc]> != null :
+            - define details <proc[si__parse_sign].context[<player>|<[loc]>]>
+            - if <[details].get[message]>:
+                - narrate <[details].get[message]>
+            - run si__add_mapping def:<player>|<[details]>
 
 
     # === (Sign) placed ===
@@ -293,19 +293,18 @@ si__add_mapping:
     - define overflow <[data].get[is_overflow]||false>
     - define is_feeder <[data].get[is_feeder]||false>
     - define facings <[data].get[facings].if_null[<list[]>]>
-    - define max_distance <[data].get[max_distance]||false>
+    - define range <[data].get[range]||0>
     - define sort_order <[data].get[sort_order]||false>
 
     # Entity check is used during repairs/item-moves to make sure the object is still present for so auto repair
     # can be triggered during item move.
     - define is_entity <[data].get[is_entity]||false>
-
     - if !<[trigger_loc]>  || !<[chest_loc]>:
         - determine false
 
-    # TIP: originally the idea was to shoten locations by dropping world. But that complicates the lookup code
-    # and only aves aroun 7.5 KB for even 500 entries per player. Until proved necessary let's favor simplistiy and reduced
-    # bugs and keep the location fully qualified
+    # Round to block, make sure remove does this as well
+    - define trigger_loc <[trigger_loc].block>
+    - define chest_loc <[chest_loc].block>
 
     # The parser cannot handle the colon delimiter and ',' inside the entity_text being built. So use '='
     # OR build the map structure directly using ';' but that involves aleays storing item/group. In this
@@ -329,22 +328,23 @@ si__add_mapping:
     # if a Feeder then by indexed by LOCATION
     - if <[is_feeder]>:
         # Optimize for feeder, all we need are feeder/chest location
-        - define entry <map[t=<[trigger_loc]>;c=<[chest_loc]>;d=<[max_distance]>;s=<[sort_order]>;f=<[facings]>;e=<[is_entity]>]>
+        #   A range of 0 means to use the system default
+        - define entry <map[t=<[trigger_loc]>;c=<[chest_loc]>;r=<[range]>;s=<[sort_order]>;f=<[facings]>;e=<[is_entity]>]>
         - flag <[player]> <[flag_root]>.feeder:->:<[entry]>
     - else:
         - if <[item]>:
             # ** ITEMS indexed by item name. Minimmal item settings, no need to keep name as that is in the index
             - define item_list <[item].as[list]>
-            - foreach <[item_list]> as:entry:
-                - define entry <map[t=<[trigger_loc]>;c=<[chest_loc]>;i=<[item]>;w=0;e=<[is_entity]>]>
+            - foreach <[item_list]> as:item:
+                - define entry <map[t=<[trigger_loc]>;c=<[chest_loc]>;f=<[item]>;ft=i;e=<[is_entity]>]>
                 - flag <[player]> <[flag_root]>.item.<[item]>:->:<[entry]>
         - if <[wildcard]>:
             # ** wildcards are a advanced_match string (not an array)
-            - define entry <map[t=<[trigger_loc]>;c=<[chest_loc]>;w=<[wildcard]>;i=0;e=<[is_entity]>]>
+            - define entry <map[t=<[trigger_loc]>;c=<[chest_loc]>;f=<[wildcard]>;ft=w;e=<[is_entity]>]>
             - flag <[player]> <[flag_root]>.wildcard:->:<[entry]>
         - if <[overflow]>:
             # ** Overflow is just a boolean, if true then ADD to the oveflow flags
-            - define entry <map[t=<[trigger_loc]>;c=<[chest_loc]>;e=<[is_entity]>]>
+            - define entry <map[t=<[trigger_loc]>;c=<[chest_loc]>;e=<[is_entity]>;f=0;ft=o]>
             - flag <[player]> <[flag_root]>.overflow:->:<[entry]>
 
 
@@ -408,9 +408,7 @@ si__remove_locations:
         #- flag <[player]> <[flag_path]>:<[keep_entries]>
 
         # THis method is likley faster for cases needing one or zero deletes, COMMON
-        # = Loop is faster, about 1ms for 40 chests
         - define found_entries <[player].flag[<[flag_path]>].filter_tag[<[filter_value].get[t].equals[<[trigger_block]>]>]>
-        - stop
         - foreach <[found_entries]> as:entry :
             #- debug log "<red>REMOVING entry: <[entry]>"
             - define remove_flag true
@@ -478,6 +476,10 @@ si__parse_frame:
     - define frame_loc <[frame].location.if_null[<[frame]>]>
     - define rotation_vector <[frame].rotation_vector>
     - define attached <[frame_loc].add[<[rotation_vector].mul[-1]>]>
+    - if <[attached].has_inventory.if_null[null]>:
+        # Update no-match so frames thata re not item matching (empty) can pass on clicks (for example to chests)
+        - define no_match <[no_match].with[chest].as[<[attached]>]>
+
     - define is_allowed <proc[is_chest_like].context[<[attached]>]>
     - if <[is_allowed].not>:
         - determine <[no_match]>
@@ -537,6 +539,9 @@ si__parse_frame:
 #
 # Tip: Multiple signs can be placed on an inventory to increase filters or add hoppers feeding an inverntory with even more signs
 #
+# NUANCE:
+#  The trigger is FALSE-LIKE if it is NOT a valid sign BUT the 'chest' may be set if the sign is attached to an inventory regardless of
+#  the signs qualifications. This allows for code to check passthrough (like right click opens) even for non inevtory signs
 #
 si__parse_sign:
   type: procedure
@@ -561,6 +566,9 @@ si__parse_sign:
         - determine <[no_match]>
 
     - define chest <[location].relative[<[facing].mul[-1]>]>
+    - if <[chest].has_inventory.if_null[null]>:
+        - define no_match <[no_match].with[chest].as[<[chest]>]>
+
     - define is_allowed <proc[is_chest_like].context[<[chest]>]>
     - if !<[is_allowed]>:
         - determine <[no_match]>
@@ -649,8 +657,8 @@ si__process_sign_text:
         - define known_facings <list[n|s|e|w|u|d]>
         - foreach <[tokens]> as:token:
             - define token <[token].trim>
-            - if <[token]> == distance:
-                - define sort_order distance
+            - if <[token]> == nerest:
+                - define sort_order nearest
                 - foreach next
             - if <[token]> == random:
                 - define sort_order random
@@ -666,11 +674,11 @@ si__process_sign_text:
             - if <[known_facings].contains_text[<[token]>]>:
                 - define facings:->:<[token]>
                 - foreach next
-            - if <[token].is_integer>:
-                - define distance <[token].min[<[max_distance]>]>
-                - if <[distance]> > <[max_distance]>:
-                    - define message "Distance (<[distance]>) blocks ignored, exceeds maximum <[max_distance]>"
-                    - define distance 0
+            - if <[token].is_decimal>:
+                - define sign_range <[token]>
+                - define range <proc[si__range_normalize].context[<[sign_range]>]>
+                - if <[sign_range]> and <[range]> != <[sign_range]>:
+                    - define message "Range value (<[sign_range]>) is out of bounds, will be dynamiclaly adjusted to: <[range]> "
                 - foreach next
             - if <item[<[token]>].exists>:
                 - define items:->:<[token]>
@@ -682,7 +690,8 @@ si__process_sign_text:
         # Build a single advanced match string
         - define wildcard <[wildcards].separated_by[|]>
 
-    - define result <map[item=<[items]>;wildcard=<[wildcard]>;facings=<[facings]>;sort_order=<[sort_order]>;is_feeder=<[is_feeder]>;overflow=<[overflow]>;max_distance=<[distance]>;message=<[message]>;is_entity=false]>
+    - define result <map[item=<[items]>;wildcard=<[wildcard]>;facings=<[facings]>;sort_order=<[sort_order]>;is_feeder=<[is_feeder]>;overflow=<[overflow]>;range=<[range]>;message=<[message]>;is_entity=false]>
+    #- debug log "<red>SIGN Parsed: <[result]>"
     - determine <[result]>
 
 
@@ -802,6 +811,10 @@ si__process_feeders:
 
             - define feeder_facings <[feeder].get[f].if_null[<list[]>]>
 
+            # Dyanmically set max range, this allows signs to be set to a HIGH value but
+            # be throttled dyannically and if configuation changes then range data in the items matrix will just be dynamically adjusted to new max
+            - define feeder_range <proc[si__range_normalize].context[<[feeder].get[r].if_null[0]>]>
+
             # Loop on each item in feeder until SOMETHING can be moved
             - define feeder_slots <[feeder_inventory].map_slots.values>
 
@@ -834,14 +847,14 @@ si__process_feeders:
                 #- define feeder_skip_next_time:->:<[feeder_item_name]>
 
                 # Set a default
-                - define diag_state "target not found for: <[feeder_item_name]>."
+                - define diag_state "target not found for: <[feeder_item_name]> (will block items following this one in inventory)"
                 # VSCode may not know about deep_with
                 - define diag_log <[diag_log].deep_with[<[diag_key]>].as[<[diag_state]>]>
 
                 # Loop through each available list, each list is tried before moving to the next
                 # === *** Limit LIST to scan to 'item' during debugging, allow others as testing completes
                 - define target_list_names <list[item|wildcard|overflow]>
-                - define target_list_names <list[item]>
+                - define target_list_names <list[item|wildcard]>
 
                 - foreach <[target_list_names]> as:list_name :
                     - if <[move_completed]>:
@@ -852,17 +865,29 @@ si__process_feeders:
                         - define target_path si.<[world_name]>.item.<[feeder_item_name]>
                     - else:
                         - define target_path si.<[world_name]>.<[list_name]>
+
                     - define targets_list <[owner].flag[<[target_path]>].if_null[<list[]>]>
+
 
                     # Scan these locations in order, on match Try to move
                     # Get starting list
-                    - define distances <list[]>
+                    - define sorted <list[]>
 
-                    # Perform a scan to build a list: [[index, distance], ....]
+                    # = Perform a scan to build a list: [[index, distance], ....]) (this loop does not move, it just builds the lisy)
                     #   This calls the slow distance (and skips the proc) once per list (old code was called 6 tiems for 3 elements qsort)
                     #   The call also gets the plane(s) the. Timing is 154ms for 5,000 elements ==> .031 ms per item. Most item lists will
                     #   by only a few, but even if 10 that is 0.1 ms and we can round to 1ms and be ok.
                     - foreach <[targets_list]> as:entry key:loop_index :
+                        # WIld card filter types need to be limited to what matches. This is, hopefully faster than distance check, if not add below distance
+                        - if <[entry].get[ft]> == w:
+                            # Wild card match, make sure feeder item matchs filter
+                            - define filter <[entry].get[f]>
+                            - if <[feeder_item_name].advanced_matches[<[filter]>].if_null[false].not>:
+                                # NO match
+                                - debug log "<red>FIlter <[filter]> did NOT match <[feeder_item_name]>"
+                                - foreach next
+                            - debug log "<red>FIlter <[filter]> MATCHED <[feeder_item_name]>"
+
                         # THis compares chest inventory block possitions. Note that for double chests this gets a bit
                         # strange and no effort is made to normalize it. Multiple trigger frame/sign on different parts of a double chest
                         # will have differnet block positions. That's just the way it is for performance reasons. This may impact
@@ -875,7 +900,7 @@ si__process_feeders:
                         # Super easy to filter out here. Tha main list is unchanged but if the indexed list (distances)
                         # is what is looped on so this is a very effecient way to filte rout before even sorting
                         # Tip: Doagnalos should also be skipped , if that is not desired use 1 instead of 1.5
-                        - if <[dist]> <= <[max_distance]> and <[dist]> >= <[min_distance]>:
+                        - if <[dist]> <= <[feeder_range]> and <[dist]> >= <[min_distance]>:
                             - define dx <[target_block].x.sub[<[source_block].x>]>
                             - define dy <[target_block].y.sub[<[source_block].y>]>
                             - define dz <[target_block].z.sub[<[source_block].z>]>
@@ -908,17 +933,17 @@ si__process_feeders:
                                     - foreach stop
 
                             - if <[allowed]>:
-                                - define distances:->:<list[<[loop_index]>|<[dist]>|<[planes]>]>
+                                - define sorted:->:<list[<[loop_index]>|<[dist]>|<[planes]>]>
 
                     # Now we want to sort the list using a tag into the each list item, which is itself a list. And in this case a tag of 1 gets the index
                     # TIP: This is useful to remember as it allows list with maps to be sorted by their key as long as the key is a pure numeric or alpah (see sort_by_value)
                     - if <[feeder].get[s].if_null[distance]> == random:
-                            - define distances <[distances].random[<[distances].size>]>
+                            - define sorted <[sorted].random[<[sorted].size>]>
                     - else:
-                        # Default sort is by distance, 2nd term of distances
-                        - define distances <[distances].sort_by_number[2]>
+                        # Default sort is by nearet (aka distance), 2nd term of list
+                        - define sorted <[sorted].sort_by_number[2]>
 
-                    - foreach <[distances]> as:distance_matrix :
+                    - foreach <[sorted]> as:distance_matrix :
                         # Skip any block that is not at least 1 from the feeder chest, this voids infinite loops
                         # and assists with chaining.
                         # Also skip any imventory over X away from trigger inventory
@@ -952,7 +977,6 @@ si__process_feeders:
                             - define diag_log <[diag_log].deep_with[<[diag_key]>].as[<[diag_state]>]>
                             - foreach next
 
-
                         # All OK, initiate a move
                         - define diag_state "Moving: <[items_to_move]> <[feeder_item_name]> TO <[target_chest].block>"
                         - define diag_log <[diag_log].deep_with[<[diag_key]>].as[<[diag_state]>]>
@@ -966,8 +990,14 @@ si__process_feeders:
                         - define move_completed true
                         - foreach stop
 
+                # Feeders ONLY process ONE item, to avoid abuses (and work like hoppers)
+                - define move_completed true
+
+
+
     # Record all logs for player for use in player diagnostics
     - flag server si_diag:<[diag_log]>
+    - debug log "<green>Feeder Log: <[diag_log]>"
 
 
 # ***
@@ -1063,10 +1093,50 @@ si__help:
     - if <[command]> == list:
         # Using '||' fallback is not reliable in Denizen due to parser limitations
         - if !<[owner].has_flag[si]>:
-            - narrate "<gray>No inventory data stored." targets:<player>
+            - narrate "<red>No inventory data stored." targets:<player>
         - else:
+            - narrate "<red>Inventory Matrix." targets:<player>
             - define inv_map <player.flag[si]>
-            - narrate "<green>Inventory map: <[inv_map]>"
+            - foreach <[inv_map]> key:world_name as:world_list:
+                - foreach <[world_list]> key:group_name as:group_list:
+                    - narrate "<gold><[world_name]> / <[group_name]> list"
+                    - choose <[group_name]>:
+                        - case feeder:
+                            - foreach <[group_list]> as:item:
+                                - define loc <[item].get[t]>
+                                - define facings <[item].get[f].separated_by[;]>
+                                - if <[facings].is_truthy.not>:
+                                    - define facings All
+                                - define max_distance <script[si_config].data_key[data].get[feeder].get[max_distance]>
+                                - define min_distance <script[si_config].data_key[data].get[feeder].get[min_distance]>
+                                - define range <[item].get[r]>
+                                - if <[range]> <= min_distance:
+
+                                - narrate "<yellow>Feeder <gray>@ <green><proc[location_noworld].context[<[loc]>]>"
+                                - narrate "-- <gray>Sort: <[item].get[s]>, Range: <[item].get[r]>, Facings: <[facings]>"
+                        - case item:
+                            # item liusts are keyed by item_name (performance)
+                            - foreach <[group_list]> key:item_name as:item_list:
+                                - foreach <[item_list]> as:item:
+                                    - define loc <[item].get[t]>
+                                    - narrate "<yellow><[item_name]> <gray>@ <green><proc[location_noworld].context[<[loc]>]>"
+                        - case wildcard:
+                            # Others liustsdo not have an extra key
+                            - foreach <[group_list]> as:item:
+                                - define item_name <[item].get[f]>
+                                - define loc <[item].get[t]>
+                                - narrate "<yellow><[item_name]> <gray>@ <green><proc[location_noworld].context[<[loc]>]>"
+                        - default:
+                            # Overflow, not-found, etc. In any case these are NOT filtered in any way they are usually event based
+                            - define item_name <[group_name]>
+                            - foreach <[group_list]> as:item:
+                                - define loc <[item].get[t]>
+                                - narrate "<yellow><[item_name]> <gray>@ <green><proc[location_noworld].context[<[loc]>]>"
+
+            #- narrate "<green>Inventory map: <[inv_map].to_json>"
+            #- if <player.is_op>:
+            #    - debug log "<red><[inv_map].to_json>"
+
         - narrate <[enable_message]>
         - stop
 
@@ -1163,6 +1233,28 @@ si_repair_triggers_nearby:
         - narrate "<yellow>Working (chunks: <[counter]>/<[area_size]>) in <[elapsed]> ms ..."
     - narrate "<gold>Finished"
 
+
+# ***
+# *** Convert passed range to allowed range, Range can be a floating point value.
+# ***
+# *** If range is not set or 0 then defaults to script max-distance. The common case is 0 when sign range is not specified
+# *** iF range is less than min (but not the above) then set to script min-distance
+# *** iF range is less than min (but not the above) then set to script max=distance
+# *** Else range is return as is
+si__range_normalize:
+  type: procedure
+  debug: false
+  definitions: range
+  script:
+    - define max_distance <script[si_config].data_key[data].get[feeder].get[max_distance]>
+    - define min_distance <script[si_config].data_key[data].get[feeder].get[min_distance]>
+    - if !<[range]>:
+        - determine <[max_distance]>
+    - if <[range]> <= <[min_distance]>:
+        - determine <[min_distance]>
+    - if <[range]> > <[max_distance]>:
+        - determine <[max_distance]>
+    - determine <[range]>
 
 
 # == BENCHMARK CODE
@@ -1266,6 +1358,37 @@ benchmark_proc_vs_inline:
     - debug log "<red>Proc call elapsed: <[elapsed_proc]> ms"
 
 
+benchmark_matches:
+  type: task
+  definitions: source
+  debug: false
+  script:
+    # Nice LONG match, way longer than would in actual practice
+    # = RESULTS: On a list of 9 wildcards on 10 players each with 100 filters the time is approx 2-3ms (initial load may be 6ms)
+    #   - "*stone|*_leaves|*wool*|apples|*_ores|!*_wood|*_ingot|*_stone|*chicken"
+    #   - This is longer than I would like but its a rather excessive count
+    # = Results: 5 players with 20 wildcards using a more reasonable sign, 1ms
+    #   - "*stone|*_leaves|*wool*|apples|*_ores"
+    # = CONCLUSION: THis seems like it should be fast enough unless players actually try to abuse the system, in which case we can
+    # = limit the number of wildcard OR just abort the wild card loop and set a feeder chest diagnostic
+    - define source <[source].if_null[red_chicken]>
+    - define matches 0
+    - define no_matches 0
+    - define targets "*stone|*_leaves|*wool*|*apples|*_ores|!*_wood|*_ingot|*_stone|*chicken"
+
+    - define start_time <util.current_time_millis>
+    # Simulates player count
+    - repeat 10:
+        # SImulates a list size of y
+        - repeat 100:
+            - define match <[source].advanced_matches[<[targets]>]>
+            - if <[match]>:
+                - define matches:++
+            - else:
+                - define no_matches:++
+
+    - define elapsed <util.current_time_millis.sub[<[start_time]>]>
+    - debug log "<gold>For <[source]> : Found <[matches]>, not found <[no_matches]> in <[elapsed]> ms"
 
 add_values:
   type: procedure
@@ -1273,6 +1396,9 @@ add_values:
   debug: false
   script:
     - determine <[a].add[<[b]>]>
+
+
+
 
 # =================================
 # ==== MOVE TO COMMON LIBRARY elements

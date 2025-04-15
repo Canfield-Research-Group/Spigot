@@ -34,6 +34,7 @@ is_chest_like:
 location_noworld:
   type: procedure
   definitions: loc
+  debug: false
   script:
     # We could combine the defines into a single line as possible -- or not. Denizen can screw that up in parsing 
     # There does not appear to be an .is[location]
