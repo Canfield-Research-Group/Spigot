@@ -100,7 +100,11 @@ si_config:
             # Feeder location data (trigger) is proccessed every x ticks where the x is calculated
             # by a simple hash that when moded by tick_delay being zero the feeder is processed.
             #   Use 0 to fire every tick, useful for debugging
-            tick_delay: 8
+            #   10 for one stack per feeder per 0.5 seconds (the others seem WAY to fast for our game)
+            #    5 for one stack per feeder per 0.25 seconds
+            #   NOTE: If players game this by just doubling the feeders, we may need to deal wth that somehow.
+            #   But if reasonable complaints arrive we can just set tick delay per to 5
+            tick_delay: 10
 
             # TODO:  maximum number of slots that can be moved per pass from each feeder
             #max_slots: 1
@@ -113,12 +117,55 @@ si_config:
             #   Use a 1 to prevent macthing NSEWUP of container
             #   Use 1 .5 to also prevent diaganols, which can help make the setup more consistent. From a human perspective 1 block shoudl includ diagnols
             min_distance: 1.5
-            max_distance: 32
 
-            # Maximum runtime before issuing a wait (there is 50ms oer tick)
-            max_runtime: 12
+            # THis is a block radius as a cuboid. It should be around 2x the bed-shunk plugins range (5)
+            # so a chest on one end of a base can reach the other without goign across the world.
+            #   Radisu of 5 chunks menas a base that can be 11 chunks by 11 chunks. Each chunk is 16 so 176
+            #   blocks. And that is a radius. So feeders operate in a  radius 10 meaning 11x11 (which is the entire chunk vertically. I might need to fix that)
+            max_distance: 176
+
+            # Maximum runtime before issuing a wait (there is 50ms oer tick) expressed in ms
+            max_runtime: 15
             # How long to wait after reaching max_runtime
             wait_time: 1t
+
+
+
+# ====== Inventory Hanlding STARTUP
+# = TO Stop from console
+# =     ex flag server si__stop:true
+# =
+# = To start up again the flag must be removed, setting to false is not enough
+# =     ex flag server si__stop:!
+# =
+
+feeder_loop_starter:
+  type: world
+  debug: false
+  events:
+
+    # Switched code to run process feeders in a tihter controlled loop that does not need the
+    # overhead of queues. THis taks no just starts and keeps it running in case it crashes out
+    # due to denizen or reloads.
+    #   Only run this occasionally to reduce overhead
+    #
+    # == HISTORIAL NOTES
+    # WHile `on delta time` is recomneded it cannot do fractional seconds and every 1s is FAR too slow
+    # Instead use every tick but no every tick, say every X or so which gives the feeder enough chance
+    # to move 1 stack every X per feeder but the feeders are also on a tick boundry. There is a lot
+    # of effort to prevent lagging out the server so lets fire every tick and see how horrible it is
+    # using the spark plugin (which I usually load on my servers for just this purpose)
+    #   TODO: The other way is to have the feeder loop actually loop continuusly, refreshing its
+    #   lock and this taks just handles cases of restart. That would be mor eperformant if the actual
+    #   capture on this event is what is the problem.
+    on delta time secondly every:5:
+        # THis taks handles it's own locking
+        - run si__loop_feeders instantly
+
+    # Reet the loop on script reload so it will startup again properly, instead of waiting for flag TTL
+    on reload scripts:
+        - flag server si_feeder_loop_active:!
+
 
 
 # ***
@@ -202,6 +249,7 @@ si__sign_or_frame_events:
     on player right clicks *_sign:
         # make sure location is defined, if not then exit now (sucha s right clicking in air and SPigot/purpur routed it to 'clocks blokc' event' event anyway)
         # Exit as quick as possible if this event is not applicable (crouching bypasses the override)
+        - define start <util.current_time_millis>
         - define loc <context.location||null>
         - if <[loc]> == null:
             - stop
@@ -615,7 +663,7 @@ si__process_sign_text:
 
     # Parsed data either returned or adjusted
     - define facings <list[]>
-    - define sort_order distance
+    - define sort_order nearby
     - define items <list[]>
     - define wildcards <list[]>
     - define overflow false
@@ -724,20 +772,70 @@ si__process_sign_text:
     - determine <[result]>
 
 
+
+# ***
+# *** Loop processes feeders continuously using local code management for ticks.
+# *** Prevent smultiple istances from running.
+# ***
+# *** To STOP set flag to anything:
+# ***   - ex flag server si_stop:true
+# ***       Debug by calling si__process_feeders directlry, reload, do whatever but the
+# ***       automated looping is stopped.
+# ***
+# *** To START (remove flag):
+# ***   - ex flag server si_stop:!
+# ***
+si__loop_feeders:
+  type: task
+  debug: false
+  script:
+    # Prevent recursive runing of this job. If somethign horrible goes
+    # wrong with task auto remove flag after 2 seconds.
+    - if <server.has_flag[si_feeder_loop_active]>:
+        - stop
+    - if <server.has_flag[si_stop]>:
+        - stop
+
+    # SOme overhead to monitor for lag - consider remocing this as it is not ber accurate
+    # but useful in development to see whent hings goe very wrong in case the TPS (Spark) is not running.
+    - define now <util.current_time_millis>
+
+    - flag server si_feeder_loop_active:true duration:2s
+    - run si__process_feeders instantly
+
+    # FInsih out the current tick to free up time
+    - wait 1t
+
+    - define prior <server.flag[si__debug].if_null[<[now]>]>
+    - flag server si__debug:<[now]>
+    - define elapsed <[now].sub[<[prior]>]>
+    # SInce this fires every tick and feeder loop takes less than a tick the expected
+    # max is 20ms -- more than that we have a problem
+    - if <[elapsed]> > 50:
+        - debug log "<red>LAGGING exceeds (1t - 50ms): <[elapsed]>"
+
+    # Let script run on next tick  - this avoids us having to add a wait here.
+    # If desired add a wait before clearing flag to avoid the 'delta event' we have running to keep this alive on reloads and such
+    #   Use a wait 20t (1 second) to slow things down for debugging if desired, which will also cause the lag event to fire
+    #   which is rather convient to help log things
+    #- wait 20t
+    - flag server si_feeder_loop_active:!
+    - run si__loop_feeders
+
+
 # ***
 # Scan all feeders
 # ***
 # *** Benchamrk issues
 # ***  - scanning a full double chest of items (unique) that MATCH a target but all targets are full (worse case): 48ms
 # ****
+# **** WARNING: This does NOT block multiple calls, but it also does not loop more than once across all feeders.
+# **** It is fine to call this while main loop is running to do a quick test or something.
 si__process_feeders:
   type: task
   debug: false
   definitions: tick_delay|filter_player
   script:
-
-    - define start_time <util.current_time_millis>
-
     - define counter 0
 
     - define elapsed_chunk_loaded 0
@@ -746,6 +844,7 @@ si__process_feeders:
     - define elapsed_setup 0
     - define elapsed_move 0
     - define bad_chest <location[1809,119,-1272,world]>
+
 
     - define feeder_constants <script[si_config].data_key[data].get[feeder]>
     - define feeder_tick_delay <[tick_delay].if_null[<[feeder_constants].get[tick_delay]>]>
@@ -758,17 +857,19 @@ si__process_feeders:
     - define jam_message "(Jam detected: Provide a/more targets for item)"
 
     # Override the tick_delay if passed
-    - if <[tick_delay]>:
-        - define feeder_tick_delay <[tick_delay]>
     - define filter_player <[filter_player].if_null[false]>
 
-    - define chunk_cache <map[]>
+    - define start_time <util.current_time_millis>
 
     # Build a list of all feeders for all players
     - define all_worlds <server.worlds>
 
-    # Diag logs are always built from scratch then updated when all processing is done this pass
-    #   This eliminates any GC issues
+
+    # Diag logs need to build on prior data
+    #  But if the feeder is skipped really early (due to tick mod check)
+    #  then there is and should notbe a diag message. SO we need to preserve it
+    #  Note: It is faster to do this than havea GC to remove old unused log entries
+    - define diag_log_prior <server.flag[si_diag].if_null[<map[]>]>
     - define diag_log <map[]>
 
     # Loop on each world and limit processing per world
@@ -793,9 +894,16 @@ si__process_feeders:
             # Add each of these to the master list
             - foreach <[feeders]> as:feeder :
                 # ONly add feeders that are applicable to the current tick
-                #   The map does NOT parse correclty, probably because the map has an embedded list
                 - if <proc[should_run_this_tick].context[<[feeder].get[t]>|<[feeder_tick_delay]>]>:
                     - define feeder_master_list:->:<list[<[owner]>|<[feeder]>]>
+                - else:
+                    # PRESERVE log diagnostics for othe ticks, these shoudl not be cleared if they are set.
+                    # They are just being SKIPPED because the do-on-tick x failed for the current tick
+                    # Only preserve KNOWN feders so we an an auto GC.
+                    - define diag_key <[owner].name>.<[world_name]>.<[feeder].get[t].block>
+                    - define prior_log <[diag_log_prior].deep_get[<[diag_key]>].if_null[null]>
+                    - if <[prior_log]>:
+                        - define diag_log <[diag_log].deep_with[<[diag_key]>].as[<[prior_log]>]>
 
             # Randomize this list for fairness
             - define feeder_master_list <[feeder_master_list].random[<[feeder_master_list].size>]>
@@ -844,6 +952,10 @@ si__process_feeders:
             # Dyanmically set max range, this allows signs to be set to a HIGH value but
             # be throttled dyannically and if configuation changes then range data in the items matrix will just be dynamically adjusted to new max
             - define feeder_range <proc[si__range_normalize].context[<[feeder].get[r].if_null[0]>]>
+            # get cuboid for feeder range, this makes limit chcks very FAST
+            #  Tip: For consistency with player expectations all bounds/ranges are from the inventories. For cases
+            #  where the inventory is a double block we just use the blok the sing/frames elements are attached to. Imperfect, yea, but a lot faster and good enough
+            - define feeder_bounds <proc[create_cuboid_from_location].context[<[feeder_chest]>|<[feeder_range]>]>
 
             # Loop on each item in feeder until SOMETHING can be moved
             - define feeder_slots <[feeder_inventory].map_slots.values>
@@ -878,7 +990,6 @@ si__process_feeders:
 
                 # Set a default
                 - define diag_state "target not found for: <[feeder_item_name]> <[jam_message]>"
-                # VSCode may not know about deep_with
                 - define diag_log <[diag_log].deep_with[<[diag_key]>].as[<[diag_state]>]>
 
                 # = Loop through each available list, each list is tried before moving to the next
@@ -886,6 +997,7 @@ si__process_feeders:
                 - define targets_all_full false
 
                 - define target_list_names <list[item|wildcard|overflow|unknown]>
+                - define target_list_names <list[item]>
                 - foreach <[target_list_names]> as:list_name :
                     - if <[move_completed]>:
                         - foreach stop
@@ -897,7 +1009,6 @@ si__process_feeders:
                         - define target_path si.<[world_name]>.<[list_name]>
 
                     - define targets_list <[owner].flag[<[target_path]>].if_null[<list[]>]>
-
 
                     # Scan these locations in order, on match Try to move
                     # Get starting list
@@ -942,15 +1053,24 @@ si__process_feeders:
                         - define planes <map[n=0;e=0;s=0;w=0;u=0;d=0]>
                         # Block rounding helps with distance and plane more dertministic
                         - define target_block <[entry].get[c]>
-                        - define source_block <[feeder_chest]>
-                        - define dist <[target_block].block.distance[<[feeder_chest]>]>
+
+                        # Verify target is in cuboid and then get ecludian distance
+                        #  Faster for cases where a lot of chest are out of range by eliminating complex distance claculation (it does start to matter at 100's of chest)
+                        #  Still allows sorting by nearest within that space
+                        - define dist <proc[cuboid_distance_from_center].context[<[feeder_bounds]>|<[target_block]>|<[feeder_chest]>]>
+                        # Normally a check on min-distance would suffic but I want o remember and codifiy this is a tad more complex in case
+                        # min_distance is changed (I doubt it would need change lower than zero through)
+                        - if <[dist]> < 0 or <[dist]> <= <[min_distance]>:
+                            # Not in cuboid so forbidden
+                            - foreach next
+
                         # Super easy to filter out here. Tha main list is unchanged but if the indexed list (distances)
                         # is what is looped on so this is a very effecient way to filte rout before even sorting
                         # Tip: Doagnalos should also be skipped , if that is not desired use 1 instead of 1.5
                         - if <[dist]> <= <[feeder_range]> and <[dist]> >= <[min_distance]>:
-                            - define dx <[target_block].x.sub[<[source_block].x>]>
-                            - define dy <[target_block].y.sub[<[source_block].y>]>
-                            - define dz <[target_block].z.sub[<[source_block].z>]>
+                            - define dx <[target_block].x.sub[<[feeder_chest].x>]>
+                            - define dy <[target_block].y.sub[<[feeder_chest].y>]>
+                            - define dz <[target_block].z.sub[<[feeder_chest].z>]>
                             - if <[dz]> < 0:
                                 - define planes <[planes].with[n].as[1]>
                             - if <[dz]> > 0:
@@ -973,11 +1093,13 @@ si__process_feeders:
                             #       Also cosndier using a distance value to limit transfer range
                             - define allowed true
                             - foreach <[feeder_facings]> as:f :
-                                - if <[planes].get[<[f]>]> == 0:
-                                    - define allowed false
-                                - else:
-                                    - define allowed true
-                                    - foreach stop
+                                # Ona n empty list Denzien can sometimes still process it, likley due to the weird way it
+                                # handles some list (@li and @li|)
+                                - if <[f]>:
+                                    - if <[planes].get[<[f]>]> == 0:
+                                        - define allowed false
+                                    - else:
+                                        - define allowed true
 
                             - if <[allowed]>:
                                 - define sorted:->:<list[<[loop_index]>|<[dist]>|<[planes]>]>
@@ -1028,7 +1150,9 @@ si__process_feeders:
                         - define targets_all_full false
 
                         # All OK, initiate a move
-                        - define diag_state "Moving: <[items_to_move]> <[feeder_item_name]> TO <[target_chest].block> PER <[list_name]> list"
+                        - define from <proc[location_noworld].context[<[feeder_chest]>]>
+                        - define to <proc[location_noworld].context[<[target_chest]>]>
+                        - define diag_state "Moving: <[items_to_move]> <[feeder_item_name]> FROM <[from]> TO <[to]> PER <[list_name]> list"
                         - define diag_log <[diag_log].deep_with[<[diag_key]>].as[<[diag_state]>]>
 
                         # Transfer item
@@ -1043,11 +1167,10 @@ si__process_feeders:
                 # Feeders ONLY process ONE item, to avoid abuses (and work like hoppers)
                 - define move_completed true
 
-
-
     # Record all logs for player for use in player diagnostics
+    #- debug log "<green>Feeder Log: <[diag_log]>"
     - flag server si_diag:<[diag_log]>
-    - debug log "<green>Feeder Log: <[diag_log]>"
+
 
 
 # ***
@@ -1217,7 +1340,8 @@ si__help:
         - define changes false
         - define owner_name <[owner].name>
         - define diag_key si_diag
-        - define log_player <server.flag[si_diag.<[owner_name]>]>
+        - define log_player <server.flag[si_diag.<[owner_name]>].if_null[<list[]>]>
+        - narrate "<gold>Checking diagnostic messages" targets:<[owner]>
         - foreach <[log_player]> key:world as:feeders :
             - narrate "<gold><[owner_name]> / <[world]>" targets:<[owner]>
             - foreach <[feeders]> key:feeder_loc as:status :

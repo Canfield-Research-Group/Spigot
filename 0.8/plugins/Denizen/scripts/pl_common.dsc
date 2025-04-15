@@ -140,3 +140,83 @@ should_run_this_tick:
     - define hash <[x].mul[31].add[<[y].mul[13]>].add[<[z].mul[7]>]>
     - define tick_group <[hash].mod[<[group_size]>]>
     - determine <[tick_group].is[==].to[<util.current_tick.mod[<[group_size]>]>]>
+
+# ***
+# *** Given a radius in blocks of a cubid calculate a spherical radius
+# *** that will cover that block. Use this when you want to a apply a
+# *** rough limit (for gameplay or performance) but also want players
+# *** to have easier way to identify distance.
+# ***
+# *** See also Manhatten and Chebyshev methods but they are not suitable
+# *** for cmapritive distances such as nearest sorting.
+# ***   - This provides an approx 57% greater range assumign a 160 block diameter
+# ***
+# *** Alterative: See if target block is in a cuboid centered on source
+# *** if os then use normal elcudian distance (per Denzien distance)
+sphercial_range_for_cube:
+  type: procedure
+  definitions: cube_diameter
+  debug: false
+  script:
+
+  # Half of each dimension (assuming center point origin)
+  - define dx <[cube_diameter].div[2]>
+  - define dz <[cube_diameter].div[2]>
+
+  # Compute max spherical radius (Pythagorean)
+  - define max_radius <[dx].mul[<[dx]>].add[<[dz].mul[<[dz]>]>].sqrt.round_up>
+  - determine max_radius
+
+
+# ***
+# *** BUild a cuboid around a location
+# ***
+# *** Use this to verify if the block is in the cubiod and only if it
+# *** use calculate distance. This provides a CUBE check and a REAL distance check.
+# *** In some cases users may find that more comfortable since it is easier to
+# *** visualize a cube ox X size in mincraft than a sphere of X size
+# ***
+# *** Check target
+# ***   - define bounds <proc[create_cuboid_from_location].context[<[source_chest].location.block>]>|<[max_distance]>]>
+# ***   - if <[bounds].contains[<[target_location]>]>:
+# ***     - define distance <[center].distance[<[target_location]>]>
+
+create_cuboid_from_location:
+  type: procedure
+  definitions: location|cube_size
+  debug: false
+  script:
+
+    # Round to block cordinates, more predicability
+    - define center <[location].block>
+
+    - define min_loc <[center].sub[<[cube_size]>,<[cube_size]>,<[cube_size]>]>
+    - define max_loc <[center].add[<[cube_size]>,<[cube_size]>,<[cube_size]>]>
+    - define bounds <[min_loc].to_cuboid[<[max_loc]>]>
+    - determine <[bounds]>
+
+
+# ***
+# *** cuboid_distance_from_center
+# ***
+# *** Given a cuboid and a location, determines the Euclidean distance
+# *** from the center of the cuboid to the target location.
+# *** Returns -1 if the location is outside the cuboid.
+# ***
+# *** Optionally (RECOMENDED) give your own center location. If not provided
+# *** the cuboid center is used. That may not be exactly what you due to
+# *** some internal cunboid rounding and, more critically, the y (height)
+# *** flooring that is done. It will nto allow world boundries to be exceeded
+# *** so the veriical center is often lost from what was original used to create the cuboid.
+# *** 
+# *** Useful for accurate nearest-target sorting with a cubic limit for user clarity.
+# ***
+cuboid_distance_from_center:
+  type: procedure
+  definitions: bounds|target_location|center_location
+  debug: false
+  script:
+    - if <[bounds].contains[<[target_location]>]>:
+        - define center <[center_location].if_null[<[bounds].center>]>
+        - determine <[center].distance[<[target_location]>]>
+    - determine -1
