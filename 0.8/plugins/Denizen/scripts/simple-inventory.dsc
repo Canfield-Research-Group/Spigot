@@ -289,9 +289,10 @@ si__add_mapping:
     - define trigger_loc <[data].get[trigger]||false>
     - define chest_loc <[data].get[chest]||false>
     - define item <[data].get[item]||false>
-    - define wildcard <[data].get[wildcard]||false>
-    - define overflow <[data].get[is_overflow]||false>
     - define is_feeder <[data].get[is_feeder]||false>
+    - define wildcard <[data].get[wildcard]||false>
+    - define is_overflow <[data].get[is_overflow]||false>
+    - define is_unknown <[data].get[is_unknown]||false>
     - define facings <[data].get[facings].if_null[<list[]>]>
     - define range <[data].get[range]||0>
     - define sort_order <[data].get[sort_order]||false>
@@ -325,32 +326,48 @@ si__add_mapping:
     - define trigger_log <[trigger_loc].block>
     - define chest_log <[chest_loc].block>
 
+
+    # = Currently a frame/sign can only mark an inventory as a single type. You cannot
+    # - mix wildcard with overflow for example. This COULD change some day, and if so the
+    # - adjust the following by allow a type to be added to multiple lists. Note that the
+    # - remove code will always remove a trigger location from ALL lists
+
     # if a Feeder then by indexed by LOCATION
     - if <[is_feeder]>:
         # Optimize for feeder, all we need are feeder/chest location
         #   A range of 0 means to use the system default
         - define entry <map[t=<[trigger_loc]>;c=<[chest_loc]>;r=<[range]>;s=<[sort_order]>;f=<[facings]>;e=<[is_entity]>]>
         - flag <[player]> <[flag_root]>.feeder:->:<[entry]>
-    - else:
-        - if <[item]>:
-            # ** ITEMS indexed by item name. Minimmal item settings, no need to keep name as that is in the index
-            - define item_list <[item].as[list]>
-            - foreach <[item_list]> as:item:
-                - define entry <map[t=<[trigger_loc]>;c=<[chest_loc]>;f=<[item]>;ft=i;e=<[is_entity]>]>
-                - flag <[player]> <[flag_root]>.item.<[item]>:->:<[entry]>
-        - if <[wildcard]>:
-            # ** wildcards are a advanced_match string (not an array)
-            - define entry <map[t=<[trigger_loc]>;c=<[chest_loc]>;f=<[wildcard]>;ft=w;e=<[is_entity]>]>
-            - flag <[player]> <[flag_root]>.wildcard:->:<[entry]>
-        - if <[overflow]>:
-            # ** Overflow is just a boolean, if true then ADD to the oveflow flags
-            - define entry <map[t=<[trigger_loc]>;c=<[chest_loc]>;e=<[is_entity]>;f=0;ft=o]>
-            - flag <[player]> <[flag_root]>.overflow:->:<[entry]>
+        - determine true
+
+    - if <[item]>:
+        # ** ITEMS indexed by item name. Minimmal item settings, no need to keep name as that is in the index
+        - define item_list <[item].as[list]>
+        - foreach <[item_list]> as:item:
+            - define entry <map[t=<[trigger_loc]>;c=<[chest_loc]>;f=<[item]>;ft=i;e=<[is_entity]>]>
+            - flag <[player]> <[flag_root]>.item.<[item]>:->:<[entry]>
+        - determine true
+
+    - if <[wildcard]>:
+        # ** wildcards are a advanced_match string (not an array)
+        - define entry <map[t=<[trigger_loc]>;c=<[chest_loc]>;f=<[wildcard]>;ft=w;e=<[is_entity]>]>
+        - flag <[player]> <[flag_root]>.wildcard:->:<[entry]>
+        - determine true
+
+    - if <[is_overflow]>:
+        # ** Overflow is just a boolean, if true then ADD to the oveflow flags
+        - define entry <map[t=<[trigger_loc]>;c=<[chest_loc]>;e=<[is_entity]>;f=0;ft=o]>
+        - flag <[player]> <[flag_root]>.overflow:->:<[entry]>
+        - determine true
+
+    - if <[is_unknown]>:
+        # ** Overflow is just a boolean, if true then ADD to the oveflow flags
+        - define entry <map[t=<[trigger_loc]>;c=<[chest_loc]>;e=<[is_entity]>;f=0;ft=o]>
+        - flag <[player]> <[flag_root]>.unknown:->:<[entry]>
+        - determine true
 
 
-    - define end_ticks <util.current_time_millis>
-    - define duration_millis <[end_ticks].sub[<[start_ticks]>]>
-    - determine true
+    - determine false
 
 
 # ***
@@ -362,13 +379,10 @@ si__remove_mapping:
   debug: false
   script:
 
-    # Use FULL search data since later the indexes will need ato be sorted by nearest so full notation is easier overall
-    #  Sometimes we receive a NON location element, liske a .../item_frame so we handle it.
-    #  We do not have an 'is[location]' or anything close so we try to use '.location' , if it works we continue using that.
-    #  as it is probably a frame object NOT location (sucha s sent during REMOVE). If the check fails we handle it with
-    # a fallback (is_null) to capture/hide the error logging and we use the item AS IS since a location does not support
-    # location, This works for sings, frames and changing frame items.
-    #  TODO: This check feels hacky, but not totlaly out of Denizen scope
+    # NOTE: This is VERY unoptimized but it's easy. And even at that it only takes 1-2 ms to process removals. In the
+    # case of frame edits, whch can trigger 2 or sometiems 3 times, that is still on 8ms max. And it is a GUI triggered
+    # event by the player so, I am not going to worry about. It works.
+
     - if <[trigger_loc].location.if_null[null]> == null:
         - define search_loc <[trigger_loc].block>
     - else:
@@ -376,19 +390,19 @@ si__remove_mapping:
 
     - define flag_root <proc[si__flag_path].context[<[search_loc]>]>
 
-    # Remove items, these are indexed by NAME, then a list of maps with t=target location (full)
-    - if <[player].has_flag[<[flag_root]>.item]>:
-        # Each item as it's on list scan. A bit slow but it is safe. This is only
-        # done on changes to frames/signs or whatever feeders
-        - define item_names <[player].flag[<[flag_root]>.item].keys>
-        - foreach <[item_names]> as:item_name :
-            - run si__remove_locations def:<[player]>|<[flag_root]>.item.<[item_name]>|<[search_loc]>
+    - define group_keys <[player].flag[<[flag_root]>].keys>
+    - foreach <[group_keys]> as:group_name:
+        - define flag_list_path <[flag_root]>.<[group_name]>
+        # Items are indexed by name, so loopt hat extra depth
+        - if <[player].has_flag[<[flag_list_path]>]>:
+            - if <[group_name]> == item:
+                # Items are indexed by item name so we need some more looping
+                - define item_names <[player].flag[<[flag_list_path]>].keys>
+                - foreach <[item_names]> as:item_name :
+                    - run si__remove_locations def:<[player]>|<[flag_list_path]>.<[item_name]>|<[search_loc]>
+            - else:
+                - run si__remove_locations def:<[player]>|<[flag_list_path]>|<[search_loc]>
 
-    # Remove Wildcard / groups which are not indexed, just a list of maps
-    - run si__remove_locations def:<[player]>|<[flag_root]>.wildcard|<[search_loc]>
-
-    # Remove Feeders which ar eno indexed, just a list of maps. Usually under 20 or so
-    - run si__remove_locations def:<[player]>|<[flag_root]>.feeder|<[search_loc]>
 
 # ***
 # *** Remove all entries that match the target key (t) from the list specified by the flag path
@@ -411,7 +425,6 @@ si__remove_locations:
         - define found_entries <[player].flag[<[flag_path]>].filter_tag[<[filter_value].get[t].equals[<[trigger_block]>]>]>
         - foreach <[found_entries]> as:entry :
             #- debug log "<red>REMOVING entry: <[entry]>"
-            - define remove_flag true
             - flag <[player]> <[flag_path]>:<-:<[entry]>
 
 # ***
@@ -639,13 +652,23 @@ si__process_sign_text:
         # We cannot just use after["["] ... as that parse fails as does nto using quotes. using substituon works altough I am not sure
         # why given Denzien's literal parser. But then again, the parser is, from my experience, in desperate need of a refactor
         - define sign_type <[type].after[<[open]>].before[<[close]>]>
-        - if <[sign_type]> == feeder:
-            - define is_feeder true
-        - else:
-            - if <[sign_type]> == inv:
-                - define is_feeder false
-            - else:
-                # A normal sing skip it
+        - define range 0
+        - define is_feeder false
+        - define is_item false
+        - define is_overflow false
+        - define is_unknown false
+        - choose <[sign_type]>:
+            - case feeder:
+                - define is_feeder true
+            - case inv:
+                # For syntax we need something here and it might be useful someday
+                - define is_item true
+            - case overflow:
+                - define is_overflow true
+            - case unknown:
+                - define is_unknown true
+            - default:
+                # A normal sing so skip parsing it
                 - determine false
 
         # Containue parsing spec. Data is parsed for inv/feeder the same for easy coding.
@@ -657,40 +680,46 @@ si__process_sign_text:
         - define known_facings <list[n|s|e|w|u|d]>
         - foreach <[tokens]> as:token:
             - define token <[token].trim>
-            - if <[token]> == nerest:
-                - define sort_order nearest
-                - foreach next
-            - if <[token]> == random:
-                - define sort_order random
-                - foreach next
-            - if <[token]> == overflow:
-                - define overflow true
-                - foreach next
             - if <[token].is_empty||false>:
                 - foreach next
-            - if <[token].starts_with[regex]>:
-                - define message "Regex not supported in sign options, skipping that (<[token]>)"
-                - foreach next
-            - if <[known_facings].contains_text[<[token]>]>:
-                - define facings:->:<[token]>
-                - foreach next
-            - if <[token].is_decimal>:
-                - define sign_range <[token]>
-                - define range <proc[si__range_normalize].context[<[sign_range]>]>
-                - if <[sign_range]> and <[range]> != <[sign_range]>:
-                    - define message "Range value (<[sign_range]>) is out of bounds, will be dynamiclaly adjusted to: <[range]> "
-                - foreach next
-            - if <item[<[token]>].exists>:
-                - define items:->:<[token]>
-                - foreach next
-            - else:
+
+            - if <[is_item]>:
+                - if <[token].starts_with[regex]>:
+                    - define message "Regex not supported in sign options, skipping that (<[token]>)"
+                    - foreach next
+                - if <item[<[token]>].exists>:
+                    - define items:->:<[token]>
+                    - foreach next
+
+            - if <[is_feeder]>:
+                # These are only available to feeders, ignore for others
+                - if <[token]> == nerest:
+                    - define sort_order nearest
+                    - foreach next
+                - if <[token]> == random:
+                    - define sort_order random
+                    - foreach next
+                # Range
+                - if <[token].is_decimal>:
+                    - define sign_range <[token]>
+                    - define range <proc[si__range_normalize].context[<[sign_range]>]>
+                    - if <[sign_range]> and <[range]> != <[sign_range]>:
+                        - define message "Range value (<[sign_range]>) is out of bounds, will be dynamiclaly adjusted to: <[range]> "
+                    - foreach next
+                - if <[known_facings].contains_text[<[token]>]>:
+                    - define facings:->:<[token]>
+                    - foreach next
+                # Assume a wilcard
                 - define wildcards:->:<[token]>
                 - foreach next
+
+            # = Else we only care about the tag (for now). Do not exit early, this code only
+            # - runs on GUI events so need not be performant and this makes it easier to add tokens with less risk of breaking things
 
         # Build a single advanced match string
         - define wildcard <[wildcards].separated_by[|]>
 
-    - define result <map[item=<[items]>;wildcard=<[wildcard]>;facings=<[facings]>;sort_order=<[sort_order]>;is_feeder=<[is_feeder]>;overflow=<[overflow]>;range=<[range]>;message=<[message]>;is_entity=false]>
+    - define result <map[item=<[items]>;wildcard=<[wildcard]>;facings=<[facings]>;sort_order=<[sort_order]>;is_feeder=<[is_feeder]>;is_overflow=<[is_overflow]>;is_unknown=<[is_unknown]>;range=<[range]>;message=<[message]>;is_entity=false]>
     #- debug log "<red>SIGN Parsed: <[result]>"
     - determine <[result]>
 
@@ -726,6 +755,7 @@ si__process_feeders:
     - define max_runtime <[feeder_constants].get[max_runtime]>
     - define wait_time <[feeder_constants].get[wait_time]>
     - define diagnostics null
+    - define jam_message "(Jam detected: Provide a/more targets for item)"
 
     # Override the tick_delay if passed
     - if <[tick_delay]>:
@@ -847,15 +877,15 @@ si__process_feeders:
                 #- define feeder_skip_next_time:->:<[feeder_item_name]>
 
                 # Set a default
-                - define diag_state "target not found for: <[feeder_item_name]> (will block items following this one in inventory)"
+                - define diag_state "target not found for: <[feeder_item_name]> <[jam_message]>"
                 # VSCode may not know about deep_with
                 - define diag_log <[diag_log].deep_with[<[diag_key]>].as[<[diag_state]>]>
 
-                # Loop through each available list, each list is tried before moving to the next
-                # === *** Limit LIST to scan to 'item' during debugging, allow others as testing completes
-                - define target_list_names <list[item|wildcard|overflow]>
-                - define target_list_names <list[item|wildcard]>
+                # = Loop through each available list, each list is tried before moving to the next
+                # Track is all found targets are full, and indirectly if unknown
+                - define targets_all_full false
 
+                - define target_list_names <list[item|wildcard|overflow|unknown]>
                 - foreach <[target_list_names]> as:list_name :
                     - if <[move_completed]>:
                         - foreach stop
@@ -883,20 +913,37 @@ si__process_feeders:
                             # Wild card match, make sure feeder item matchs filter
                             - define filter <[entry].get[f]>
                             - if <[feeder_item_name].advanced_matches[<[filter]>].if_null[false].not>:
-                                # NO match
-                                - debug log "<red>FIlter <[filter]> did NOT match <[feeder_item_name]>"
+                                # NO match - so do NOT add to distance list
                                 - foreach next
-                            - debug log "<red>FIlter <[filter]> MATCHED <[feeder_item_name]>"
 
-                        # THis compares chest inventory block possitions. Note that for double chests this gets a bit
+                        # The targets_all_full works as a overflow and unknown flag but are only viable if checked AFTER all item filters are applied (item, wildcard)
+                        #   If FALSE then we reached the overflow/unknown without finding a suitable move. So Unknown
+                        #       Since otherwise we would have MOVED the item and exited the loop
+                        #   If FALSE then we reached the overflow/unknown and found a target (or more) but they were full. So Overflow is triggered
+                        #       If a target was found it was moved OR there was no room, so is consdiered full
+                        # Our logic is skip based so the above is REVERSED
+                        - if <[list_name]> == overflow and <[targets_all_full].not>:
+                            # NOT uoverflow since no target was found to be empty
+                            - foreach next
+
+                        # The uknown will ONLY fire if a no targets were found
+                        - if <[list_name]> == unknown and <[targets_all_full]>:
+                            # NOT unknonw, targets were found
+                            - foreach next
+
+
+                        # From here on all that we need is the keys tc (chest) key in the target lists. So thjis works for entries within an item name group,
+                        # wildcard, overflow and unknown, as well as any other fallback/priority elements
+
+                        # This compares chest inventory block possitions. Note that for double chests this gets a bit
                         # strange and no effort is made to normalize it. Multiple trigger frame/sign on different parts of a double chest
                         # will have differnet block positions. That's just the way it is for performance reasons. This may impact
                         # distances bt (1).
                         - define planes <map[n=0;e=0;s=0;w=0;u=0;d=0]>
                         # Block rounding helps with distance and plane more dertministic
-                        - define target_block <[entry].get[c].block>
-                        - define source_block <[feeder_chest].block>
-                        - define dist <[target_block].block.distance[<[feeder_chest].block>]>
+                        - define target_block <[entry].get[c]>
+                        - define source_block <[feeder_chest]>
+                        - define dist <[target_block].block.distance[<[feeder_chest]>]>
                         # Super easy to filter out here. Tha main list is unchanged but if the indexed list (distances)
                         # is what is looped on so this is a very effecient way to filte rout before even sorting
                         # Tip: Doagnalos should also be skipped , if that is not desired use 1 instead of 1.5
@@ -968,17 +1015,20 @@ si__process_feeders:
                             - run si__remove_mapping def:<[owner]>|<[target_chest]>
                             - foreach next
 
-
                         - define space_available <[target_inventory].can_fit[<[feeder_item_name]>].count>
                         - define items_to_move <[space_available].min[<[feeder_item_quantity].min[<[max_quantity]>]>]>
                         - if <[items_to_move]> <= 0 :
                             # No space in the target so continue scanning items
-                            - define diag_state "targets full: <[feeder_item_name]>."
+                            - define diag_state "all targets full: <[feeder_item_name]> <[jam_message]>"
                             - define diag_log <[diag_log].deep_with[<[diag_key]>].as[<[diag_state]>]>
+                            - define targets_all_full true
                             - foreach next
 
+                        # Space was found so NOT all full
+                        - define targets_all_full false
+
                         # All OK, initiate a move
-                        - define diag_state "Moving: <[items_to_move]> <[feeder_item_name]> TO <[target_chest].block>"
+                        - define diag_state "Moving: <[items_to_move]> <[feeder_item_name]> TO <[target_chest].block> PER <[list_name]> list"
                         - define diag_log <[diag_log].deep_with[<[diag_key]>].as[<[diag_state]>]>
 
                         # Transfer item
@@ -1102,35 +1152,33 @@ si__help:
                     - narrate "<gold><[world_name]> / <[group_name]> list"
                     - choose <[group_name]>:
                         - case feeder:
-                            - foreach <[group_list]> as:item:
-                                - define loc <[item].get[t]>
-                                - define facings <[item].get[f].separated_by[;]>
+                            - foreach <[group_list]> as:entry:
+                                - define loc <[entry].get[t]>
+                                - define facings <[entry].get[f].separated_by[;]>
                                 - if <[facings].is_truthy.not>:
                                     - define facings All
-                                - define max_distance <script[si_config].data_key[data].get[feeder].get[max_distance]>
-                                - define min_distance <script[si_config].data_key[data].get[feeder].get[min_distance]>
-                                - define range <[item].get[r]>
-                                - if <[range]> <= min_distance:
+                                - define range <[entry].get[r]>
+                                - define range_adj <proc[si__range_normalize].context[<[range]>]>
 
                                 - narrate "<yellow>Feeder <gray>@ <green><proc[location_noworld].context[<[loc]>]>"
-                                - narrate "-- <gray>Sort: <[item].get[s]>, Range: <[item].get[r]>, Facings: <[facings]>"
+                                - narrate "-- <gray>Sort: <[entry].get[s]>, Range: <[range_adj]>(<[range]>), Facings: <[facings]>"
                         - case item:
                             # item liusts are keyed by item_name (performance)
                             - foreach <[group_list]> key:item_name as:item_list:
-                                - foreach <[item_list]> as:item:
-                                    - define loc <[item].get[t]>
+                                - foreach <[item_list]> as:entry:
+                                    - define loc <[entry].get[t]>
                                     - narrate "<yellow><[item_name]> <gray>@ <green><proc[location_noworld].context[<[loc]>]>"
                         - case wildcard:
                             # Others liustsdo not have an extra key
-                            - foreach <[group_list]> as:item:
-                                - define item_name <[item].get[f]>
-                                - define loc <[item].get[t]>
+                            - foreach <[group_list]> as:entry:
+                                - define item_name <[entry].get[f]>
+                                - define loc <[entry].get[t]>
                                 - narrate "<yellow><[item_name]> <gray>@ <green><proc[location_noworld].context[<[loc]>]>"
                         - default:
                             # Overflow, not-found, etc. In any case these are NOT filtered in any way they are usually event based
                             - define item_name <[group_name]>
-                            - foreach <[group_list]> as:item:
-                                - define loc <[item].get[t]>
+                            - foreach <[group_list]> as:entry:
+                                - define loc <[entry].get[t]>
                                 - narrate "<yellow><[item_name]> <gray>@ <green><proc[location_noworld].context[<[loc]>]>"
 
             #- narrate "<green>Inventory map: <[inv_map].to_json>"
