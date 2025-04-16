@@ -131,6 +131,7 @@ si_config:
 
             # list order. Users will need to force this into a list:
             #       ....get[list_order].as[list]
+            # Feeders should NOT be in tis list, those are handled seperately
             list_order: item|wildcard|overflow_item|overflow_wildcard|overflow_fallback|unknown
 
 
@@ -256,7 +257,7 @@ si__sign_or_frame_events:
 
         # Sneaking and right click lets you edit a sign SOMETIMES but it is NOT reliable, it was a few hour ago. Not sure what's up with that
         # in any case we need a bypass so stick allows edit
-        - if <player.is_sneaking> || <player.item_in_hand.material.name> == stick:
+        - if <player.is_sneaking> || <player.item_in_hand.material.name.advanced_matches[stick|*frame|*_sign]>:
             - stop
 
         - define details <proc[si__parse_sign].context[<player>|<[loc]>]>
@@ -286,8 +287,6 @@ si__sign_or_frame_events:
     after player places *_sign:
         - define details <proc[si__parse_sign].context[<player>|<context.location>]>
         - run narrate_list def.list:<[details].get[messages]> def.color:<green>
-        - stop
-
         - define trigger <[details].get[trigger]>
         - if !<[trigger]>:
             - stop
@@ -433,7 +432,7 @@ si__add_mapping:
     - if <[is_feeder]>:
         - define accum_facings <[data].get[accum_facings].if_null[<list[]>]>
         - define range <[data].get[range]||0>
-        - define sort_order <[data].get[sort_order]||false>
+        - define sort_order <[data].get[sort_order]||nearest>
         - define be_quiet <[data].get[be_quiet]||0>
 
         # Optimize for feeder, all we need are feeder/chest location
@@ -467,7 +466,6 @@ si__add_mapping:
             - define item_path wildcard
 
         - define entry <map[t=<[trigger_loc]>;c=<[chest_loc]>;f=<[wildcard]>;ft=w;e=<[is_entity]>]>
-        - debug log "<green>Entry: <[entry]>"
         - flag <[player]> <[flag_root]>.<[item_path]>:->:<[entry]>
         - define rtn_flag true
 
@@ -476,7 +474,6 @@ si__add_mapping:
     # 'overflow_fallback' which have no filters and is done last (assuming overflow is in effect)
     - if <[is_overflow]> :
         - define is_fallback <[data].get[overflow_fallback]||0>
-        - debug log "<gold>is_fallback : <[is_fallback]>"
         - if <[is_fallback]>:
             - define entry <map[t=<[trigger_loc]>;c=<[chest_loc]>;ft=n;e=<[is_entity]>]>
             - flag <[player]> <[flag_root]>.overflow_fallback:->:<[entry]>
@@ -576,7 +573,7 @@ si__frame_details:
   debug: false
   script:
      # There is no Entity
-    - define no_match <map[trigger=false;chest=false;message=false]>
+    - define no_match <map[trigger=false;chest=false;messages=<list[]>]>
 
     # Exit as quick as possible if this event is not applicable (wrong type)
     - if <[entity].entity_type> != item_frame:
@@ -607,7 +604,7 @@ si__parse_frame:
   debug: false
   script:
     # Id no match is found return nulls for each element
-    - define no_match <map[trigger=false;chest=false;message=false;is_entity=1]>
+    - define no_match <map[trigger=false;chest=false;messages=<list[]>;is_entity=1]>
 
     # Frames are peculary, so they need to be trated a bit different, hande object OR loc
     - define frame_loc <[frame].location.if_null[<[frame]>]>
@@ -657,7 +654,7 @@ si__parse_frame:
 
     # Return both feeder and chest-like inventory location. use a map to self-document. This is all internal
     # data so size is not relevent.
-    - determine <map[trigger=<[frame_loc]>;chest=<[attached]>;item=<[item_filter]>;wildcard=false;is_feeder=<[is_feeder]>;message=false;is_entity=0]>
+    - determine <map[trigger=<[frame_loc]>;chest=<[attached]>;item=<[item_filter]>;wildcard=false;is_feeder=<[is_feeder]>;messages=<list[]>;is_entity=0]>
 
 
 # ****
@@ -1255,7 +1252,7 @@ si__process_feeders:
 
                     # Now we want to sort the list using a tag into the each list item, which is itself a list. And in this case a tag of 1 gets the index
                     # TIP: This is useful to remember as it allows list with maps to be sorted by their key as long as the key is a pure numeric or alpah (see sort_by_value)
-                    - if <[feeder].get[s].if_null[distance]> == random:
+                    - if <[feeder].get[s].if_null[nearest]> == random:
                             - define sorted <[sorted].random[<[sorted].size>]>
                     - else:
                         # Default sort is by nearet (aka distance), 2nd term of list
