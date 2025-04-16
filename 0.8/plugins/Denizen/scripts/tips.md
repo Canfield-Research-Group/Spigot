@@ -837,7 +837,45 @@ cuboid_distance_from_center:
 ```
 
 
-### Command Corrections
+## Denizen Strings Are 1-Based
+
+Just like lists, strings in Denizen are 1-indexed, which is rare (and confusing) compared to most languages.
+
+So this:
+
+- define ca <[a].substring[<[i]>,<[i]>]>
+
+Will correctly grab the i-th character, because substring[start,end] in Denizen is:
+- Inclusive of start
+- Inclusive of end
+
+And string indices start at 1.
+
+Confirmed Behavior:
+
+| Code	| Result |
+| ----- | ------ |
+| substring[1,1] on "wheat"	| "w" |
+| substring[2,2] | "h" |
+| substring[3,3] | "e" |
+
+
+## Listing available Items is not possible
+
+There does not seem to be a util or server tag/command for generating a list of items. There
+is a `<server.vanilla_material_tags>` that generates materials but it lacks many items such as
+wheat, carrots, etc. Such a list would have to be manually created or extarcted from source code
+or download from the iternet. In any case no such internal Denzien command exists.
+
+There is a way to see if an item exists: `<item[an-item-name].exists>`
+
+## Set an empty string (blank)
+
+Using `-define wildcard ""` can be problematic as the parser can remove end up removing
+the "" and sometimes cauisng the instruction to be blank. Consider using
+`- define wildcard <element[]>`.
+
+## Command Corrections
 
 The following commands are often suggested but are wrong. This table shows the modern command
 
