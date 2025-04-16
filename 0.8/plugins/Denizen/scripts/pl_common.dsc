@@ -38,7 +38,7 @@ location_noworld:
   script:
     # We could combine the defines into a single line as possible -- or not. Denizen can screw that up in parsing 
     # There does not appear to be an .is[location]
-    - define loc_obj <[loc].as[location]>
+    - define loc_obj <[loc].as[location].if_null[loc_obj]>
     - if <[loc_obj].world.exists.not>:
         - debug log "<red>Invalid location input: <[loc]>"
         - determine null
@@ -220,3 +220,30 @@ cuboid_distance_from_center:
         - define center <[center_location].if_null[<[bounds].center>]>
         - determine <[center].distance[<[target_location]>]>
     - determine -1
+
+
+# ***
+# *** Narrate the list to the player, optionally prefixes each output with the color
+# *** does nothign if ist is empty.
+# ***
+# *** list : A line of text, a list, or (RECOMENDED an escaped list/text
+# *** color : Color to use as default for each line, do not pass or use false-like for no special color
+# *** player : Player object, defaults to current player
+narrate_list:
+  type: task
+  definitions: list|color|player
+  debug: false
+  script:
+    - define list <[list].unescaped>
+    - if <[list].object_type> != list:
+      - define list <[list].as[list]>
+
+    - if <[list].is_empty.not>:
+      # Use current player if player not passed
+      - define target_player <[player]||<player>>
+      # Default color to empty if not passed
+      - define use_color <[color]||"">
+
+      - foreach <[list]> as:line:
+          - narrate "<[use_color]><[line]>" targets:<[target_player]>
+
