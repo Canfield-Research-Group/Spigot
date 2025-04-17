@@ -289,6 +289,7 @@ si__sign_or_frame_events:
         - run narrate_list def.list:<[details].get[messages]> def.color:<green>
         - define trigger <[details].get[trigger]>
         - if !<[trigger]>:
+            - run si__remove_mapping def:<player>|<context.location>
             - stop
         - run si__add_mapping def:<player>|<[details].escaped>
         - run si__feeder_notify def:<[details].get[trigger]>|<[details].get[is_feeder]>
@@ -298,6 +299,7 @@ si__sign_or_frame_events:
         - define trigger <context.location>
         - define block_name <[trigger].material.name>
         - if !<[block_name].ends_with[_sign]>:
+            - run si__remove_mapping def:<player>|<context.location>
             - stop
         - run si__remove_mapping def:<player>|<[trigger]>
 
@@ -496,20 +498,27 @@ si__add_mapping:
 # ***
 si__remove_mapping:
   type: task
-  definitions: player|trigger_loc
+  definitions: player|trigger_loc|lookup_key
   debug: false
   script:
+
+    # - player : Player object
+    # - triger_loc : A location object to filter (and remove) fro item matrix
+    # - looup_key : usually 't' (Default trigger a sign/frame), 'c' (by inventory)
 
     # NOTE: This is VERY unoptimized but it's easy. And even at that it only takes 1-2 ms to process removals. In the
     # case of frame edits, whch can trigger 2 or sometiems 3 times, that is still on 8ms max. And it is a GUI triggered
     # event by the player so, I am not going to worry about. It works.
-
+    - define lookup_key <[lookup_key].if_null[t]>
     - if <[trigger_loc].location.if_null[null]> == null:
         - define search_loc <[trigger_loc].block>
     - else:
         - define search_loc <[trigger_loc].location.block>
 
     - define flag_root <proc[si__flag_path].context[<[search_loc]>]>
+
+    # Round trigger to block level, which is what the item matrix contains
+    - define trigger_loc <[trigger_loc].block>
 
     - define group_keys <[player].flag[<[flag_root]>].if_null[<map[]>].keys>
     - foreach <[group_keys]> as:group_name:
@@ -520,22 +529,23 @@ si__remove_mapping:
                 # Items are indexed by item name so we need some more looping
                 - define item_names <[player].flag[<[flag_list_path]>].keys>
                 - foreach <[item_names]> as:item_name :
-                    - run si__remove_locations def:<[player]>|<[flag_list_path]>.<[item_name]>|<[search_loc]>
+                    - run si__remove_locations def:<[player]>|<[flag_list_path]>.<[item_name]>|<[search_loc]>|<[lookup_key]>
             - else:
-                - run si__remove_locations def:<[player]>|<[flag_list_path]>|<[search_loc]>
+                - run si__remove_locations def:<[player]>|<[flag_list_path]>|<[search_loc]>|<[lookup_key]>
 
 
 # ***
 # *** Remove all entries that match the target key (t) from the list specified by the flag path
 si__remove_locations:
   type: task
-  definitions: player|flag_path|trigger_loc
+  definitions: player|flag_path|trigger_loc|lookup_key
   debug: false
   script:
 
     # THis method is likley faster for cases needing multiple deletes, RARE.
     - if <[player].has_flag[<[flag_path]>]>:
-        - define trigger_block <[trigger_loc].block>
+
+        - define debug 0
 
         # = DEPRECATED : This works but is 3ms for 40 chests and one or zero duplicates. Which is the norm
         #- define keep_entries <[player].flag[<[flag_path]>].filter_tag[<[filter_value].get[t].equals[<[trigger_loc]>].not>]>
@@ -543,10 +553,11 @@ si__remove_locations:
         #- flag <[player]> <[flag_path]>:<[keep_entries]>
 
         # THis method is likley faster for cases needing one or zero deletes, COMMON
-        - define found_entries <[player].flag[<[flag_path]>].filter_tag[<[filter_value].get[t].equals[<[trigger_block]>]>]>
+        - define log <Element[]>
+        - define found_entries <[player].flag[<[flag_path]>].filter_tag[<[filter_value].get[<[lookup_key]>].equals[<[trigger_loc]>]>]>
         - foreach <[found_entries]> as:entry :
-            #- debug log "<red>REMOVING entry: <[entry]>"
             - flag <[player]> <[flag_path]>:<-:<[entry]>
+        - stop
 
 # ***
 # *** Build base flag path to root of invenotory based ona location string
@@ -683,7 +694,7 @@ si__parse_sign:
   debug: false
   script:
     # Id no match is found return nulls for each element
-    - define no_match <map[trigger=false;chest=false;item=false;wildcard=false;is_feeder=false;message=false;is_entity=0]>
+    - define no_match <map[trigger=false;chest=false;item=false;wildcard=false;is_feeder=false;messages=<list[]>;is_entity=0]>
 
     - define trigger <[location]||null>
     - if !<[trigger]>:
@@ -713,7 +724,7 @@ si__parse_sign:
         - determine <[no_match]>
     - else:
         - define data <[data].with[trigger].as[<[trigger]>].with[chest].as[<[chest]>]>
-        #- debug log "<red>SIGN Parsed: <[data]>"
+        - debug log "<red>SIGN Parsed: <[data]>"
         - determine <[data]>
 
 
@@ -1032,7 +1043,7 @@ si__process_feeders:
                     - if <[prior_log].starts_with[JAM]>:
                         - if !<[feeder].get[q].if_null[0]>:
                             # Adjust effect location, note that the playeffec.offset is more a random flucation around each particale effect so is not precise for positioning
-                            #   - For angry_villager a single particale is visible fine and lower lag on client than 2
+                            # - For angry_villager a single particale is visible fine and lower lag on client than 2
                             - define effect_loc <[feeder_loc].add[.5,.0,.5]>
                             - playeffect <[effect_loc]> effect:angry_villager quantity:1 offset:0.1,0.1,0.1 visibility:10
                             #- define effect_loc <[feeder_loc].add[.5,.25,.5]>
@@ -1041,7 +1052,6 @@ si__process_feeders:
                             # = Item particles are quite cool and fun, bu carry some load for the client, stick to more basic
                             #- define effect_loc <[feeder_loc].add[.5,1,.5]>
                             #- playeffect <[effect_loc]> effect:item special_data:pumpkin quantity:2 offset:0.1,0.1,0.1 visibility:10 velocity:0,.1,0
-
                 - else:
                     # PRESERVE log diagnostics for othe ticks, these shoudl not be cleared if they are set.
                     # They are just being SKIPPED because the do-on-tick x failed for the current tick
@@ -1065,8 +1075,8 @@ si__process_feeders:
             - define move_completed false
 
             # Check feeder location (trigger)
-            - define trigger_loc <[feeder].get[t]>
-            - if <[trigger_loc].chunk.is_loaded.not>:
+            - define feeer_loc <[feeder].get[t]>
+            - if <[feeder_loc].chunk.is_loaded.not>:
                 - define diag_state "Info: chunk not loaded"
                 - foreach next
 
@@ -1088,7 +1098,8 @@ si__process_feeders:
             #   check if feeder is inventory like. Be QUICK, the longer procedure for this is FAR too sslow
             - define feeder_inventory <[feeder_chest].inventory.if_null[null]>
             - if <[feeder_inventory]> == null:
-                - run si__remove_mapping def:<[owner]>|<[feeder_chest]>
+                - debug log "<red>Feeder chest missing: <[feeder_chest]>"
+                - run si__remove_mapping def:<[owner]>|<[feeder_chest]>|c
                 - foreach next
 
             # If empty then nothing to do so exit
@@ -1280,7 +1291,7 @@ si__process_feeders:
                         - define target_inventory <[target_chest].inventory.if_null[null]>
                         - if <[target_inventory]> == null:
                             - debug log "<red>Feeder no longer a valid inventory, removing: <[owner]> -- <[target_chest]>"
-                            - run si__remove_mapping def:<[owner]>|<[target_chest]>
+                            - run si__remove_mapping def:<[owner]>|<[target_chest]>|c
                             - foreach next
 
                         - define space_available <[target_inventory].can_fit[<[feeder_item_name]>].count>
@@ -1336,7 +1347,7 @@ si__help:
     - define radius <context.args.get[3]||5>
 
     - define feeder_constants <script[si_config].data_key[data].get[feeder]>
-    - define preferred_list_order <[feeder_constants].get[list_order].as[list]>
+    - define preferred_list_order <list[feeder].include[[feeder_constants].get[list_order].as[list]]>
 
     # Help block (called when command is missing or unknown)
     - define show_help false
@@ -1587,7 +1598,7 @@ test_flag_setup:
             - define flag_path "test_list.item_name_<[value]>"
             - debug log "<green>Path: <[flag_path]>"
             - repeat 20:
-                - define entry <map[trigger='-9999,61,9999@nether';chest='-9999,<[value]>,9999@nether';item=false;wildcard=false;is_feeder=false;message=<[value]>]>
+                - define entry <map[trigger='-9999,61,9999@nether';chest='-9999,<[value]>,9999@nether';item=false;wildcard=false;is_feeder=false;messages=<[value]>]>
                 - flag player <[flag_path]>:->:<[entry]>
         - narrate "Test list created with x entries."
 
