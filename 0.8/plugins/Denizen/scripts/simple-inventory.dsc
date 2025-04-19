@@ -232,16 +232,6 @@ si__sign_or_frame_events:
             # DO NOT copy on change sign - it gets too confusing, especially since edit sign
             # pops up for sign placement as well
 
-    # == Left click on sign copies contents
-    on player left clicks *_sign:
-        # Location is just used to verify the event has the data we eed
-        - define loc <context.location||null>
-        - if <[loc]> == null:
-            - stop
-        - define details <proc[si__parse_sign].context[<player>|<[loc]>]>
-        # We do not care about sneaking in this case
-
-
     # === (Sign) placed AFTER ===
     after player places *_sign:
         # Call parser
@@ -253,8 +243,9 @@ si__sign_or_frame_events:
     # === Sign broken ===
     after player breaks *_sign:
         - define trigger <context.location>
-        - run si__copy_sign_text def:<player>|<context.location>
         - define block_name <[trigger].material.name>
+        - run si__remove_mapping def:<player>|<[trigger]>
+
 
     # === Frame entity broken (REMOVED) ===
     # This is NOT reliable as the 'on entioty dies' is not reliable called when a frame is broken.
@@ -726,8 +717,6 @@ si__process_sign_text:
 
     # Instead of geting fancy I am going to do a DEAD SIMPLE code.
     - define sign_contents <[sign_obj].sign_contents||null>
-    # Save sign contents, useful for sign copy behavior
-    - define result <[result].with[sign_contents].as[<[sign_contents]>]>
     - if <[sign_contents]> == null:
         - determine <[result]>
     - define sign_lines <list[]>
