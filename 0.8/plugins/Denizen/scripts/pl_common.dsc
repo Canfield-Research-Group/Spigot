@@ -234,16 +234,17 @@ narrate_list:
   definitions: list|color|player
   debug: false
   script:
-    - define list <[list].unescaped>
-    - if <[list].object_type> != list:
-      - define list <[list].as[list]>
+    - if <[list].is_truthy>:
+      - define list <[list].unescaped>
+      - if <[list].object_type> != list:
+        - define list <[list].as[list]>
 
-    - if <[list].is_empty.not>:
-      # Use current player if player not passed
-      - define target_player <[player]||<player>>
-      # Default color to empty if not passed
-      - define use_color <[color]||"">
+      - if <[list].is_empty.not>:
+        # Use current player if player not passed
+        - define target_player <[player]||<player>>
+        # Default color to empty if not passed
+        - define use_color <[color]||"">
 
-      - foreach <[list]> as:line:
-          - narrate "<[use_color]><[line]>" targets:<[target_player]>
+        - foreach <[list]> as:line:
+            - narrate "<[use_color]><[line]>" targets:<[target_player]>
 

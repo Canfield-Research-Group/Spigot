@@ -28,66 +28,17 @@
 #
 # ------------------------------------------------------------------------------
 
-# TODO: CHANGE the inventory storage
-#
-#
-#
-# = A refactor is probably needed but watch out for performance
-#    issues with proc calls. They add up. But worse case it's probably one proc per feeder + flag path to use.
-#    Which means task must return a vaue. Looks like we can via determine xxx trhen caller can use the following. AI
-#    suggested this but 'determination' does exist (note this use Robb's Denizen GPT). Review how wildcards affect
-#    the looping before deciding. But it would make overflow easier. Just make it a new list!
-#       - run my_task_script save:result
-#       - define outcome <entry[result].determination>
-#       - narrate "Task returned: <[outcome]>"
-
-# x Suport Round Robin
-#   x ADD disbtristbution type to feeder signs. Second line contains '[random]' or '[nearest]' (default)
-#       x Note: Frame Feeders cannot are always nearest
-#       ? (WIP) Future - we may support a x suffix to limit feeder rang to x blocks. Makes everythign a distance. 
-#           x In loop code we can just skip cheststo far away, not worth the cost to rebuild the list since most of the time it will stop on the first match
-#   x Add a new key to feeders 'd' for distribution. It will be 'r' or 'n'. For now just run repair instead of working about backwards compatibility
-#   X change item list sorting to use the new feeder 'd' key to select proper mode
-#
-# - Sign optimizations
-#   x For NORMAL item entries add to the items list. THis is much more performant
-#   x Wildcard are added to the wild card  index and that table is sorted in the same way as the others
-#  
-# - Wildcards
-#   - add wildcard processing that occurs after item processing.
-#
-# - Overflow
-#   - Overflow (overflow) is used if no chest can hold the item. If we refactor code to use a a seperate task for moving
-#   then this is easy. We just call the that ask with the item name overflow. But I am not sure what impact that will have.
-#   Otherwise it is a lot trikier.
-#
-# - Tie into world tick, probably every 4 ticks maybe 8 (like hoppers but full stacks)
-#       - Hoopers run at 2.5 items second so we have a lot of flexibility to be at least this fast
-#           - sorter runs every tick and operates for 1ms max per, then saves state and waits for 1t
-#           - consider running 1 cycle for all feeders and move a STACK (or whatever fits)
-#           - process nearest chests with same item first, but a partial move due to room is still an event
-#           - if no exact items match/have room process against the SIGN chests
-#           - if none have room process the special '[inv] overflow' chest(s) in nearest order
-#           - Based on total time to move items we may run more than one loop but even at that we will be
-#           - running up to 64 a tick!
-#           - main process will need to tracl state:
-#               - current player name
-#               - current feeder offset (we will assume a per move across multiple chests is in out 2ms range)
-
-
-# TODO: Structure of code to avoid horrible lag
-    # - move full stacks (easier code) - one per tick, per push?
-    # - Can multiple scripts run, one for each player so one player does not hog?
-        # - Or we code this ourself?
-    # - detect target full and skip it
-    # - detect target has redstone ON to it and skip (ie stopped hoppers)
-    # X - range limit, closest ( 1.5 > dist < 32)
-    # - LONG distance transport: water streams, tricky but works. Easier with bubble elevators (souls and), trains work as well but can be more/less  complex depdnign on route
-    #  - Do NOT support interworld inventory or LONG range chaining. Do that the minecraft way. Kepe it simple and clean
-
-
-# TODO command to rebuild inventory matrix based on x chunks around player (default is bed-spawn chunks if that flag exists), elase 5 chunks
-
+# == TODO:
+# - Make it so leading and trailing '_' auto add wildcard internally (saves space)
+# - the '!' is currently useless for inventory. Instead make a new NOT filter key
+# and place all those into that key (same sign). Then apply NORMAL filters followed by
+# NOT. Note that this only is useful for wildcard (since items are moved to item match)
+# so a ! without a wildcard is NOT supported and will be ignored.
+#   Example: *!stone stone
+#   Match anythign ending with stone BUT not stone. Note order of ! within other tokens is
+#   not relevant. For performance is happens after all wildcards.
+#       See if performance is that critical or maybe we should look through each ???
+#       or maybe '!' is not very useful.
 
 # ***
 # *** Configuration data
@@ -205,19 +156,15 @@ si__sign_or_frame_events:
 
         - define details <proc[si__frame_details].context[<player>|<context.entity>]>
         - run narrate_list def.list:<[details].get[messages]> def.color:<green>
+        - run si__feeder_notify def:<[details].get[trigger]>|<[details].get[is_feeder]>
 
         # an auto repair, in case something went wrong, this should not impact performance in any meaningful way
         #     allow chest sbehind signs NOT part of inevntory system to be opened
-        - define chest <[details].get[chest]>
+        - run si__add_mapping def:<player>|<[details]>
+        - define chest <[details].get[chest]||false>
         - if <[chest]>:
-            - if <[details].get[trigger]>:
-                - run si__add_mapping def:<player>|<[details]>
-
             - run open_chest_gui def:<player>|<[chest]>
             - determine cancelled
-        - else:
-            # AUTO REPAIR: If there is no chest something broke, fix it
-            - run si__remove_mapping def:<player>|<context.entity.location>
 
 
     # === ENTITY (Frame) changes ===
@@ -235,22 +182,21 @@ si__sign_or_frame_events:
 
         # No wait is needed as this is an AFTER event
         - define details <proc[si__parse_frame].context[<player>|<[frame]>|<[item]>]>
-        - run narrate_list def.list:<[details].get[messages]> def.color:<green>
 
         # an auto repair, in case something went wrong, this should not impact performance in any meaningful way
-        - if <list[BROKEN|REMOVE].contains_text[<[action]>]>:
-            - run si__remove_mapping def:<player>|<[frame]>
+        - if <list[BROKEN REMOVE].contains_text[<[action]>]>:
+            - define details <[details].with[is_valid].as[0]>
         - else:
-            # Triggered by: PLACE
-            - run si__add_mapping def:<player>|<[details].escaped>
             - run si__feeder_notify def:<[details].get[trigger]>|<[details].get[is_feeder]>
+
+        - run si__add_mapping def:<player>|<[details].escaped>
+        - run narrate_list def.list:<[details].get[messages]> def.color:<green>
 
 
     # === Right click on sign
     on player right clicks *_sign:
         # make sure location is defined, if not then exit now (sucha s right clicking in air and SPigot/purpur routed it to 'clocks blokc' event' event anyway)
         # Exit as quick as possible if this event is not applicable (crouching bypasses the override)
-        - define start <util.current_time_millis>
         - define loc <context.location||null>
         - if <[loc]> == null:
             - stop
@@ -273,35 +219,42 @@ si__sign_or_frame_events:
 
         - determine cancelled
 
-
     # == Changes Sign
     after player changes sign:
         - define loc <context.location||null>
         - if <[loc]> != null :
+            - run si__remove_mapping def:<player>|<[loc]>
             - define details <proc[si__parse_sign].context[<player>|<[loc]>]>
             - run narrate_list def.list:<[details].get[messages]> def.color:<green>
             - run si__add_mapping def:<player>|<[details].escaped>
             - run si__feeder_notify def:<[details].get[trigger]>|<[details].get[is_feeder]>
 
-    # === (Sign) placed ===
+            # DO NOT copy on change sign - it gets too confusing, especially since edit sign
+            # pops up for sign placement as well
+
+    # == Left click on sign copies contents
+    on player left clicks *_sign:
+        # Location is just used to verify the event has the data we eed
+        - define loc <context.location||null>
+        - if <[loc]> == null:
+            - stop
+        - define details <proc[si__parse_sign].context[<player>|<[loc]>]>
+        # We do not care about sneaking in this case
+
+
+    # === (Sign) placed AFTER ===
     after player places *_sign:
+        # Call parser
         - define details <proc[si__parse_sign].context[<player>|<context.location>]>
         - run narrate_list def.list:<[details].get[messages]> def.color:<green>
-        - define trigger <[details].get[trigger]>
-        - if !<[trigger]>:
-            - run si__remove_mapping def:<player>|<context.location>
-            - stop
         - run si__add_mapping def:<player>|<[details].escaped>
         - run si__feeder_notify def:<[details].get[trigger]>|<[details].get[is_feeder]>
 
     # === Sign broken ===
     after player breaks *_sign:
         - define trigger <context.location>
+        - run si__copy_sign_text def:<player>|<context.location>
         - define block_name <[trigger].material.name>
-        - if !<[block_name].ends_with[_sign]>:
-            - run si__remove_mapping def:<player>|<context.location>
-            - stop
-        - run si__remove_mapping def:<player>|<[trigger]>
 
     # === Frame entity broken (REMOVED) ===
     # This is NOT reliable as the 'on entioty dies' is not reliable called when a frame is broken.
@@ -320,21 +273,19 @@ si__feeder_notify:
     debug: false
     script:
         # If data is passed then  we use it, otherwse assume its a location. Fallbacks seem easiest in this case
-        - define is_feeder <[is_feeder].if_null[true]>
-        - if <[is_feeder]>:
-            - define owner <[owner].if_null[<player>]>
-            - define feeder_block <[feeder_loc].block>
-            - define world_name <[feeder_block].world.name>
-            - define diag_key <[owner].name>.<[world_name]>.<[feeder_block]>
-            - define diag_status <server.flag[si_diag.<[diag_key]>].if_null[No Data]>
-            - if <[diag_status].starts_with[JAM]>:
-                - define color "<red>"
-            - else:
-                - define color "<green>"
-            - define loc_simple <proc[location_noworld].context[<[feeder_block]>]>
-            - narrate "<gold>Feeder Status: <[color]><[diag_status]> <gold>(<[loc_simple]>)" targets:<[owner]>
-
-
+        - if <[feeder_loc].is_truthy> AND <[is_feeder].is_truthy>:
+            - define feeder_block <[feeder_loc].block||null>
+            - if <[feeder_block]> != null:
+                - define owner <[owner].if_null[<player>]>
+                - define world_name <[feeder_block].world.name>
+                - define diag_key <[owner].name>.<[world_name]>.<[feeder_block]>
+                - define diag_status <server.flag[si_diag.<[diag_key]>].if_null[No Data]>
+                - if <[diag_status].starts_with[JAM]>:
+                    - define color "<red>"
+                - else:
+                    - define color "<green>"
+                - define loc_simple <proc[location_noworld].context[<[feeder_block]>]>
+                - narrate "<gold>Feeder Status: <[color]><[diag_status]> <gold>(<[loc_simple]>)" targets:<[owner]>
 
 # ***
 # *** Add the data element to the applicable indexes. This also removes any other locations in any index that exists.
@@ -365,10 +316,6 @@ si__add_mapping:
   definitions: player|data|is_nottify
   debug: false
   script:
-    # ==== Tempory OP this for developer
-    - if !<[player].has_permission[minecraft.command.op]>:
-        - stop
-
     - define start_ticks <util.current_time_millis>
 
     # unescape restores the data type, since in Denzien I think EVERYTHING is a string there is no 'data-type' in the normal
@@ -376,14 +323,27 @@ si__add_mapping:
     # Which might make code REALLY REALLY slow.
     - define data <[data].unescaped>
 
-    # Common location data
+    # Common location data - no trigger data, then someone called us wrong and there is nothing to do
     - define trigger_loc <[data].get[trigger]||false>
+    - if !<[trigger_loc]>:
+        - determine false
+    - else:
+        - define trigger_loc <[trigger_loc].block>
+
+    # Note: A missing chest is delayed until after we remove any defintions for this event
     - define chest_loc <[data].get[chest]||false>
+    - if <[chest_loc]>:
+        - define chest_loc <[chest_loc].block>
+
+
+    # Remove any existing objects for inventory matrix
+    - run si__remove_mapping def:<[player]>|<[trigger_loc]>
 
     # If missign a trigger or chest location this is a sign of incomplet or aborted parsing, it is
     # actually normal to be called with this to avoid adding conditions to every caller.
-    - if !<[trigger_loc]> || !<[chest_loc]>:
-        - determine false
+    - if <[data].get[is_valid].is_truthy.not> or !<[chest_loc]>:
+        - determine stop
+
 
     # Expect to get full data element, we will optimize these in the when updating flags
     # TIP: Do NOT Adjust all locations to block level, this prevents multiple frames per chest
@@ -391,10 +351,6 @@ si__add_mapping:
     - define is_feeder <[data].get[is_feeder]||false>
     - define is_overflow <[data].get[is_overflow]||false>
     - define is_unknown <[data].get[is_unknown]||false>
-
-    # Round to block, make sure remove does this as well
-    - define trigger_loc <[trigger_loc].block>
-    - define chest_loc <[chest_loc].block>
 
     # Make these availbel for all types
     - define item <[data].get[item]||false>
@@ -411,8 +367,6 @@ si__add_mapping:
     #  * !!! Always use '=' in maps even through doc shows ':' as being more common. The ':' is often mis-parsed
     #  * Denzien just gets weirder and weirder
 
-    # Remove any existing objects for inventory matrix
-    - run si__remove_mapping def:<[player]>|<[trigger_loc]>
 
     # Build flag path
     - define flag_root <proc[si__flag_path].context[<[trigger_loc]>]>
@@ -506,6 +460,10 @@ si__remove_mapping:
     # - triger_loc : A location object to filter (and remove) fro item matrix
     # - looup_key : usually 't' (Default trigger a sign/frame), 'c' (by inventory)
 
+    # If trigger location is not set then we cannot proces it
+    - if !<[trigger_loc]>:
+        - determine false
+
     # NOTE: This is VERY unoptimized but it's easy. And even at that it only takes 1-2 ms to process removals. In the
     # case of frame edits, whch can trigger 2 or sometiems 3 times, that is still on 8ms max. And it is a GUI triggered
     # event by the player so, I am not going to worry about. It works.
@@ -519,6 +477,8 @@ si__remove_mapping:
 
     # Round trigger to block level, which is what the item matrix contains
     - define trigger_loc <[trigger_loc].block>
+
+    #- debug log "<green>Key: <[lookup_key]> -- <[search_loc]> -- <[trigger_loc]>""
 
     - define group_keys <[player].flag[<[flag_root]>].if_null[<map[]>].keys>
     - foreach <[group_keys]> as:group_name:
@@ -544,20 +504,23 @@ si__remove_locations:
 
     # THis method is likley faster for cases needing multiple deletes, RARE.
     - if <[player].has_flag[<[flag_path]>]>:
+        #- debug log "<green>Key: <[lookup_key]> -- <[trigger_loc]>""
 
-        - define debug 0
-
-        # = DEPRECATED : This works but is 3ms for 40 chests and one or zero duplicates. Which is the norm
-        #- define keep_entries <[player].flag[<[flag_path]>].filter_tag[<[filter_value].get[t].equals[<[trigger_loc]>].not>]>
-        #- flag <[player]> <[flag_path]>:!
-        #- flag <[player]> <[flag_path]>:<[keep_entries]>
-
-        # THis method is likley faster for cases needing one or zero deletes, COMMON
-        - define log <Element[]>
-        - define found_entries <[player].flag[<[flag_path]>].filter_tag[<[filter_value].get[<[lookup_key]>].equals[<[trigger_loc]>]>]>
-        - foreach <[found_entries]> as:entry :
-            - flag <[player]> <[flag_path]>:<-:<[entry]>
+        # = More reliable. It is apparently unreliable to remove complex keys indivually via :<-: which aligns ith my experience with it being weird ...
+        - define original <[player].flag[<[flag_path]>]>
+        - define keep_entries <[original].filter_tag[<[filter_value].get[t].equals[<[trigger_loc]>].not>]>
+        - if <[original].size> != <[keep_entries].size>:
+            - flag <[player]> <[flag_path]>:<[keep_entries]>
+            - define new <[player].flag[<[flag_path]>]>
         - stop
+
+        # THis method is likley faster for cases needing one or zero deletes, COMMON - BUT it can have issues with removing complex items (MAYBE)
+        #- define log <Element[]>
+        #- define found_entries <[player].flag[<[flag_path]>].filter_tag[<[filter_value].get[<[lookup_key]>].equals[<[trigger_loc]>]>]>
+        #- foreach <[found_entries]> as:entry :
+        #    - debug log "<red>Remove: <[flag_path]> :: <[trigger_loc]> -- <[entry]>"
+        #    - flag <[player]> <[flag_path]>:<-:<[entry]>
+        #- stop
 
 # ***
 # *** Build base flag path to root of invenotory based ona location string
@@ -583,13 +546,6 @@ si__frame_details:
   definitions: player|entity
   debug: false
   script:
-     # There is no Entity
-    - define no_match <map[trigger=false;chest=false;messages=<list[]>]>
-
-    # Exit as quick as possible if this event is not applicable (wrong type)
-    - if <[entity].entity_type> != item_frame:
-        - determine <[no_match]>
-
     # Re-use the complex frame parser
     - define data <proc[si__parse_frame].context[<[player]>|<[entity]>]>
 
@@ -615,19 +571,28 @@ si__parse_frame:
   debug: false
   script:
     # Id no match is found return nulls for each element
-    - define no_match <map[trigger=false;chest=false;messages=<list[]>;is_entity=1]>
+    - define result <proc[si__base_parser_result]>
+
+    # Exit as quick as possible if this event is not applicable (wrong type)
+    - if <[frame].entity_type.advanced_matches[item_frame|glow_item_frame]>:
+        - define result <[result].with[is_entity].as[1]>
+    - else:
+        - define result <[result].with[is_entity].as[0]>
+        - determine <[result]>
 
     # Frames are peculary, so they need to be trated a bit different, hande object OR loc
     - define frame_loc <[frame].location.if_null[<[frame]>]>
+    - define result <[result].with[trigger].as[<[frame_loc]>]>
+
     - define rotation_vector <[frame].rotation_vector>
     - define attached <[frame_loc].add[<[rotation_vector].mul[-1]>]>
     - if <[attached].has_inventory.if_null[null]>:
         # Update no-match so frames thata re not item matching (empty) can pass on clicks (for example to chests)
-        - define no_match <[no_match].with[chest].as[<[attached]>]>
+        - define result <[result].with[chest].as[<[attached]>]>
 
     - define is_allowed <proc[is_chest_like].context[<[attached]>]>
     - if <[is_allowed].not>:
-        - determine <[no_match]>
+        - determine <[result]>
 
     # If itemw as not passed then fetch from passed frame data
     - define item <[item]||<[frame].framed_item>>
@@ -637,9 +602,10 @@ si__parse_frame:
 
     - if <[item_filter]> == air:
         # Empty frame - use 'not applciable' (common in this script, and saves space in large maps)
-        - determine <[no_match]>
+        - determine <[result]>
     - else:
         - define is_feeder false
+        - define result <[result].with[item].as[<[item_filter]>]>
         - if <[item_filter]> == arrow:
             # If an arrow we are interested in rotation, an UP pointing arrow is treated as an AUTO SORTER
             # he challenge is we want the rotation AFTER it is rotated not before ....
@@ -662,10 +628,12 @@ si__parse_frame:
             - if <[item_rotation]> == counter_clockwise_45:
                 # feeder
                 - define is_feeder true
+        - define result <[result].with[is_feeder].as[<[is_feeder]>]>
 
     # Return both feeder and chest-like inventory location. use a map to self-document. This is all internal
     # data so size is not relevent.
-    - determine <map[trigger=<[frame_loc]>;chest=<[attached]>;item=<[item_filter]>;wildcard=false;is_feeder=<[is_feeder]>;messages=<list[]>;is_entity=0]>
+    - define result <[result].with[is_valid].as[1]>
+    - determine <[result]>
 
 
 # ****
@@ -694,38 +662,38 @@ si__parse_sign:
   debug: false
   script:
     # Id no match is found return nulls for each element
-    - define no_match <map[trigger=false;chest=false;item=false;wildcard=false;is_feeder=false;messages=<list[]>;is_entity=0]>
+    - define base_data <proc[si__base_parser_result]>
 
     - define trigger <[location]||null>
     - if !<[trigger]>:
-        - determine <[no_match]>
+        - determine <[base_data]>
+
+    - define base_data <[base_data].with[trigger].as[<[trigger]>]>
 
     - define block_name <[trigger].material.name>
     - if !<[block_name].ends_with[_sign]>:
-        - determine <[no_match]>
+        - determine <[base_data]>
 
     # Signs re SO much simpler than frames, so optimize for signs (bug backward/forward still seem weird, and not reliable)
     - define facing <[trigger].block_facing||null>
     # This is NOT just attached blocks but also blocks behind the sign. Filter for only attached  proved annoying so allow a sign to be in FRONT of chest
     - if !<[facing]>:
-        - determine <[no_match]>
+        - determine <[base_data]>
 
     - define chest <[location].relative[<[facing].mul[-1]>]>
     - if <[chest].has_inventory.if_null[null]>:
-        - define no_match <[no_match].with[chest].as[<[chest]>]>
+        - define base_data <[base_data].with[chest].as[<[chest]>]>
 
     - define is_allowed <proc[is_chest_like].context[<[chest]>]>
     - if !<[is_allowed]>:
-        - determine <[no_match]>
+        - determine <[base_data]>
 
     # Get sign data and assign internal postional
     - define data <proc[si__process_sign_text].context[<[trigger]>]>
-    - if !<[data]>:
-        - determine <[no_match]>
-    - else:
-        - define data <[data].with[trigger].as[<[trigger]>].with[chest].as[<[chest]>]>
-        - debug log "<red>SIGN Parsed: <[data]>"
-        - determine <[data]>
+    - define result <[base_data].include[<[data]>]>
+
+    #- debug log "<red>SIGN Parsed: <[result]>"
+    - determine <[result]>
 
 
 # ***
@@ -754,11 +722,16 @@ si__process_sign_text:
     - define is_unknown false
 
     # Build basic result set to minimums
-    - define result <map[is_item=<[is_item]>;is_feeder=<[is_feeder]>;is_overflow=<[is_overflow]>;is_unknown=<[is_unknown]>;is_entity=0]>
+    - define result <map[]>
 
     # Instead of geting fancy I am going to do a DEAD SIMPLE code.
+    - define sign_contents <[sign_obj].sign_contents||null>
+    # Save sign contents, useful for sign copy behavior
+    - define result <[result].with[sign_contents].as[<[sign_contents]>]>
+    - if <[sign_contents]> == null:
+        - determine <[result]>
     - define sign_lines <list[]>
-    - foreach <[sign_obj].sign_contents> as:line :
+    - foreach <[sign_contents]> as:line :
         # Clean lines of special cpracters
         - define line <[line].unescaped.strip_color.trim.to_lowercase>
         # Split these into more lines based on special characters
@@ -789,8 +762,13 @@ si__process_sign_text:
         - define close ']'
         # We cannot just use after["["] ... as that parse fails as does nto using quotes. using substituon works altough I am not sure
         # why given Denzien's literal parser. But then again, the parser is, from my experience, in desperate need of a refactor
+        - define sign_pattern [*]
+        - if <[type].advanced_matches[<[sign_pattern]>].not>:
+            - determine <[result]>
+        # Note that if .before fails the entire string is returned not false-like as one might expect
         - define sign_type <[type].after[<[open]>].before[<[close]>]>
         - define range 0
+
         # Controls if particles are emitted
         - define be_quiet 0
         - choose <[sign_type]>:
@@ -809,8 +787,7 @@ si__process_sign_text:
                 - define result <[result].with[is_unknown].as[<[is_unknown]>]>
             - default:
                 # A normal sing so skip parsing it and exit
-                - determine false
-
+                - determine <[result]>
 
         # Containue parsing spec. Data is parsed for inv/feeder the same for easy coding.
         # THe calling code will store the data applicable to the type fo sign, and ignore the rest
@@ -833,8 +810,9 @@ si__process_sign_text:
                 - if <item[<[token]>].exists>:
                     - define accum_items:->:<[token]>
                     - foreach next
-                - if <[token].contains_any_text[!|*].not>:
-                    - define accum_messages <[accum_messages].include[<red>The token (<yellow><[token]><red>) does not look like an wildcard match but is not a known item name. Remember to use minecraft names (with underscores but no minecraft: prefix). <yellow>Example: wheat_seeds]>
+                # ! is no longer supported, see TODO
+                - if <[token].contains_any_text[*].not> or <[token].contains_any_text[!]>:
+                    - define accum_messages <[accum_messages].include[<red>Invalid Item name:  (<yellow><[token]><gold>) does not look like an wildcard match (! is NOT supported) but is not a known item name. Remember to use minecraft names (with underscores but no minecraft: prefix). <yellow>Example: wheat_seeds]>
                     - foreach next
                 # = Assume a wilcard, these are accumulated below
                 - define accum_wildcards:->:<[token]>
@@ -854,7 +832,7 @@ si__process_sign_text:
                     - define sign_range <[token]>
                     - define range <proc[si__range_normalize].context[<[sign_range]>]>
                     - if <[sign_range]> and <[range]> != <[sign_range]>:
-                        - define accume_messages <[accum_messages].include[<yellow>Range value (<[sign_range]>) is out of bounds, will be dynamiclaly adjusted to: <[range]>]>
+                        - define accume_messages <[accum_messages].include[<gold>Range value (<yellow><[sign_range]>)<gold> is out of bounds, will be dynamiclaly adjusted to: <yellow><[range]>]>
                     - define result <[result].with[range].as[<[sign_range]>]>
                     - foreach next
 
@@ -865,7 +843,7 @@ si__process_sign_text:
                 - if <[token]> == quiet:
                     - define result <[result].with[be_quiet].as[<[be_quiet]>]>
                     - foreach next
-                - define accum_messages <[accum_messages].include[<red>Feeder spec warning: The token (<[token]>) is not a valid feeder token, ignoring. For Sort use: nearest,random, Faceings: n,s,e,q,w,d,u, Range: number, Quiet: quiet]>
+                - define accum_messages <[accum_messages].include[<red>Feeder spec warning: <gold>The token (<yellow><[token]>) <gold>is not a valid feeder token, ignoring. For <yellow>Sort<gold> use: nearest,random, <yellow>Faceings:<gold> n,s,e,q,w,d,u, <yellow>Range:<gold> number, <yellow>Quiet:<gold> quiet]>
                 - foreach next
 
             # = Else we only care about the tag (for now). Do not exit early, this code only
@@ -885,7 +863,6 @@ si__process_sign_text:
             # This forms the final overflow mechanism
             - define result <[result].with[overflow_fallback].as[1]>
 
-
     - if <[accum_items].is_empty.not>:
         - define result <[result].with[item].as[<[accum_items]>]>
 
@@ -895,6 +872,7 @@ si__process_sign_text:
     # Always add messages, even if empty. Many callers check this and it's easier if it always exists
     - define message_escaped <[accum_messages].escaped>
     - define result <[result].with[messages].as[<[message_escaped]>]>
+    - define result <[result].with[is_valid].as[1]>
 
     - determine <[result]>
 
@@ -981,7 +959,6 @@ si__process_feeders:
     - define elapsed_setup 0
     - define elapsed_move 0
 
-
     - define feeder_constants <script[si_config].data_key[data].get[feeder]>
     - define feeder_tick_delay <[tick_delay].if_null[<[feeder_constants].get[tick_delay]>]>
     - define min_distance <[feeder_constants].get[min_distance]>
@@ -1000,7 +977,6 @@ si__process_feeders:
 
     # Build a list of all feeders for all players
     - define all_worlds <server.worlds>
-
 
     # Diag logs need to build on prior data
     #  But if the feeder is skipped really early (due to tick mod check)
@@ -1170,7 +1146,7 @@ si__process_feeders:
                     # Get starting list
                     - define sorted <list[]>
 
-                    # = Perform a scan to build a list: [[index, distance], ....]) (this loop does not move, it just builds the lisy)
+                    # = Perform a scan to build a list: [[index, distance], ....]) (this loop does not move items, it just builds the list)
                     #   This calls the slow distance (and skips the proc) once per list (old code was called 6 tiems for 3 elements qsort)
                     #   The call also gets the plane(s) the. Timing is 154ms for 5,000 elements ==> .031 ms per item. Most item lists will
                     #   by only a few, but even if 10 that is 0.1 ms and we can round to 1ms and be ok.
@@ -1335,9 +1311,9 @@ si__process_feeders:
 # TODO: Prototype - clean this up when code structure is done
 si__help:
   type: command
-  name: simple_inventory
+  name: simple-inventory
   description: List or reset simple inventory feeders
-  usage: /simple_inventory [player] [list/clear/rebuild/enable/disable/diag] [rebuild-radius-chunks]
+  usage: /simple-inventory [player] [list/clear/rebuild/enable/disable/diag] [rebuild-radius-chunks]
   permission: simple_inventory.list
   debug: false
   script:
@@ -1347,7 +1323,7 @@ si__help:
     - define radius <context.args.get[3]||5>
 
     - define feeder_constants <script[si_config].data_key[data].get[feeder]>
-    - define preferred_list_order <list[feeder].include[[feeder_constants].get[list_order].as[list]]>
+    - define preferred_list_order <list[feeder].include[<[feeder_constants].get[list_order].as[list]>]>
 
     # Help block (called when command is missing or unknown)
     - define show_help false
@@ -1360,18 +1336,18 @@ si__help:
 
     - if <[show_help]>:
         - narrate "<gold>Simple Inventory Help:"
-        - narrate "<yellow>/simple_inventory [player] list"
+        - narrate "<yellow>/simple-inventory [player] list"
         - narrate "<gray> View all active inventory feeders for that player"
-        - narrate "<yellow>/simple_inventory [player] enable"
+        - narrate "<yellow>/simple-inventory [player] enable"
         - narrate "<gray>  Enable plugin for player"
-        - narrate "<yellow>/simple_inventory [player] disable"
+        - narrate "<yellow>/simple-inventory [player] disable"
         - narrate "<gray>  Disable inventory handling (only) for player, all data is maintained"
-        - narrate "<yellow>/simple_inventory [player] clear"
+        - narrate "<yellow>/simple-inventory [player] clear"
         - narrate "<gray>  Remove all inventory feeder data"
-        - narrate "<yellow>/simple_inventory [player] repair [radius]"
+        - narrate "<yellow>/simple-inventory [player] repair [radius]"
         - narrate "<gray>  Scan signs/frames around player to rebuild flags"
         - narrate "<gray>  Default radius is <white>5<yellow> chunks."
-        - narrate "<yellow>/simple_inventory [player] diag"
+        - narrate "<yellow>/simple-inventory [player] diag"
         - narrate "<gray>  Show last status of feeders"
         - stop
 
@@ -1391,9 +1367,9 @@ si__help:
     # get current mode
     - define enabled <[owner].flag[si_enabled].if_null[false]>
     - if <[enabled]>:
-        - define enable_message "<green>Status: Inventory handling is ENABLED. To disable use:/simple_inventory [name] disable"
+        - define enable_message "<green>Status: Inventory handling is ENABLED. To disable use:/simple-inventory [name] disable"
     - else:
-        - define enable_message "<yellow>Status: Inventory handling is DISABLED. To enable use:/simple_inventory [name] enable"
+        - define enable_message "<yellow>Status: Inventory handling is DISABLED. To enable use:/simple-inventory [name] enable"
 
     # All commands have a player component for ease of parsing
     - if <[command]> == list:
@@ -1472,7 +1448,7 @@ si__help:
     - if <[command]> == clear:
         - flag <player> si:!
         - narrate "<red>Inventory locations cleared for <[owner]>"
-        - narrate "<yellow>Click each sign/frame OR use /simple_inventory <player> repair"
+        - narrate "<yellow>Click each sign/frame OR use /simple-inventory <player> repair"
         - narrate <[enable_message]>
         - stop
 
@@ -1527,6 +1503,9 @@ si_repair_triggers_nearby:
     - repeat <[radius].mul[2].add[1]> as:x:
         - define start_ticks_raw <util.current_time_millis>
         - repeat <[radius].mul[2].add[1]> as:z:
+            # TODO: Scan chunks async (a task) and wait for results
+            # TODO: IF we can reliable get results back OR even better
+            # TODO: Call back into a MAIN thread to process data then continue async
             - define offset_x <[x].sub[<[radius].add[1]>]>
             - define offset_z <[z].sub[<[radius].add[1]>]>
             - define cx <[loc].x.add[<[offset_x]>]>
@@ -1584,6 +1563,18 @@ si__range_normalize:
     - if <[range]> > <[max_distance]>:
         - determine <[max_distance]>
     - determine <[range]>
+
+
+
+# === set up a default sign/frame map that is guarnteed to have minimum element smany functions
+# === count on for quick checks
+# - assuming I don't screw up the code
+si__base_parser_result:
+  type: procedure
+  debug: false
+  definitions: range
+  script:
+    - determine <map[trigger=false;chest=false;is_valid=false;is_feeder=false;is_item=false;is_overflow=false;is_unknown=false;messages=false]>
 
 
 # == BENCHMARK CODE
@@ -1685,6 +1676,132 @@ benchmark_proc_vs_inline:
     - define end_proc <util.current_time_millis>
     - define elapsed_proc <[end_proc].sub[<[start_proc]>]>
     - debug log "<red>Proc call elapsed: <[elapsed_proc]> ms"
+
+
+
+# ESCAPE/UNESCAPE is VERY fast at 40ms oer 10,000 for a resonable
+# size map.
+# 
+# But an unreasonbale sized match, like an simple inventory flag map that is a a few KB
+# is VERY SLOW:
+#   4139 ms  for 10,000
+# Loading it from flags 10,000 times is 115 ms
+benchmark_flags:
+  type: procedure
+  definitions: v
+  debug: false
+  script:
+
+    - define test_player <server.match_player[mrakavin]>
+    #- define test_map <map[is_valid=false;is_feeder=false;is_item=false;is_overflow=false;is_unknown=false;facings=false;messages=false;items=false;wildcard=false;entity=false;range=false;be_quite=false]>
+    #- define test_map <[test_player].flag[si.world]>
+
+    # Create a temporary are to work with
+    - define f <[test_player].flag[si]>
+    - flag <[test_player]> si_tmp:<[f]>
+    - define test_map <[test_player].flag[si_tmp.world]>
+
+
+    # --- Inline addition benchmark ---
+    - define start_t <util.current_time_millis>
+    - define counter 0
+    - repeat 1:
+        # = 4161ms
+        #- define e <[test_map].escaped>
+        #- define t <[test_map].unescaped>
+
+        # = 115ms
+        #- define test_map <[test_player].flag[si_tmp.world]>
+
+
+        # - 266ms 10,000 using flags for all work in sub-task (append / remove last)
+        #- run benchmark_flag def:<[test_player]>|item.dirt|HELLO]
+
+        # - 148ms reading flags into a list, maniuplating list but NOT saving to flag
+        #- run benchmark_flag_list def:<[test_player]>|item.dirt|HELLO]
+
+        # - 257ms to do all work (add/remove) to temp list then assign at end
+        #- run benchmark_flag_list def:<[test_player]>|item.dirt|HELLO]
+
+        # - 44ms to just FECTH the desired key from the flag, in this case 4. SHowing fetcing flag data is fast
+        #- run benchmark_flag_list def:<[test_player]>|item.dirt|HELLO]
+        - run benchmark_flag def:<[test_player]>|item.dirt|HELLO]
+
+
+        # == Conslusion: workingd irectly with flags is not horrible slow
+        # - it is still faster (within a procedure) to grab just the map you need and work it, then save
+        # - DO NOT PASS any excpet the smalles lists, just use flags if possible
+
+
+        - define counter:++
+    - define end_t <util.current_time_millis>
+    - define elapsed_t <[end_t].sub[<[start_t]>]>
+    - debug log "<green>Escaped/unescaped: <[elapsed_t]> ms for <[counter]> iterations"
+    #- debug log "<red>t = <[t]>"
+
+
+benchmark_flag:
+  type: task
+  definitions: player|path|key|value
+  debug: false
+  script:
+    #- debug log "<red>Before: <[player].flag[si_tmp.world.<[path]>]>"
+    - define old <[player].flag[si_tmp.world.<[path]>]>
+    - debug log "<green>Original: <[old]>"
+
+    #- debug log "<gold>Entry: <[old]>""
+    - define new <[old].get[1].with[f].as[ROCK]>
+    #- debug log "<gold>Entry New: <[new]>"
+    #- flag <[player]> si_tmp.world.<[path]>[1]:<[new]>  FAILS
+#   - flag <[player]> si_tmp.world.<[path]>:->:<[new]>
+    #- flag <[player]> si_tmp.world.<[path]>[1]:HELLO
+
+    # WORKS: the .2 is ignored and the  path (item.dir) was SET to a map wiht key 2 = the new litem as a list
+    #- flag <[player]> si_tmp.world.<[path]>[2]:<[new]>
+    #- debug log "<gold>Entry changed 2: <[player].flag[si_tmp.world.<[path]>]>"
+
+
+    # FAILS: the [2].f  the 'f' is ignored and everytign ends at [2]
+    #- flag <[player]> si_tmp.world.<[path]>[2].f:COMPUTER
+    #- debug log "<gold>Entry changed 2.f: <[player].flag[si_tmp.world.<[path]>]>"
+
+    # FAILS: the [2].[f] - nothing changed - weird
+    - flag <[player]> si_tmp.world.<[path]>[2][f]:COMPUTER
+    - debug log "<gold>Entry changed [2][f]: <[player].flag[si_tmp.world.<[path]>]>"
+
+    # WORKS: Replace item offset 2 (2nd item) (like [last])
+    #- flag <[player]> si_tmp.world.<[path]>[2]:<[new]>
+    #- debug log "<gold>Entry changed [2]: <[player].flag[si_tmp.world.<[path]>]>"
+
+    # WORKS: LAST is valid with chnage
+    #- flag <[player]> si_tmp.world.<[path]>[last]:->:<[new]>
+    #- debug log "<gold>Entry changed [last]: <[player].flag[si_tmp.world.<[path]>]>"
+
+
+
+    # Specific index: OK
+    #- flag <[player]> si_tmp.world.<[path]>[1]:<[new]>
+    # LAST ITEM OK (here we remove it) VERY COOL
+    #- flag <[player]> si_tmp.world.<[path]>[last]:<-
+    #- debug log "<green>After: <[player].flag[si_tmp.world.<[path]>]>"
+    # Using si_tmp.world.<[path]>[f]:ROCK  : FAILED to set the f element in the map. The [f] was IGNORED
+
+benchmark_flag_list:
+  type: task
+  definitions: player|path|key|value
+  debug: false
+  script:
+    - define test_map <[player].flag[si_tmp.world.<[path]>]>
+    - stop
+
+    #- debug log "<red>Before: <[test_map]>""
+    - define new <[test_map].get[1].with[f].as[ROCK]>
+    - define test_map:->:<[new]>
+    #- debug log "<gold>Entry: <[test_map]>"
+    # LAST ITEM OK (here we remove it
+    - define test_map[last]:<-
+    #- debug log "<red>after: <[test_map]>"
+    - flag <[player]> si_tmp.world.<[path]>:<[test_map]>
 
 
 benchmark_matches:
