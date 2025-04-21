@@ -15,7 +15,7 @@ er__unbreaking_book_i:
     material: enchanted_book
     enchantments:
         - unbreaking:1
-    display name: Unbreaking I Book
+    display name: Book Unbreaking I
     recipes:
         1:
             type: shaped
@@ -35,7 +35,7 @@ er__protection_book_i:
     material: enchanted_book
     enchantments:
         - protection:1
-    display name: Protection I Book
+    display name: Book Protection I
     recipes:
         1:
             type: shaped
