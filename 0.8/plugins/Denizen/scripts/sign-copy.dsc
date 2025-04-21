@@ -125,7 +125,7 @@ sc__help:
 
     - if <[command]> == verbose:
         # Using '||' fallback is not reliable in Denizen due to parser limitations
-        - if <[owner].has_flag[si.quiet]>:
+        - if <[owner].has_flag[sc.quiet]>:
             - flag <[owner]> sc.quiet:!
         - narrate "<green>Sign copy status will be displayed in chat. See help"
 
