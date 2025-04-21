@@ -1,4 +1,4 @@
-    # ***
+# ***
 # A VERY simple invrneoty system propsoal
 # Place a Frame  with the desired item in it on an object
 #   * chests (any side)
@@ -1322,8 +1322,15 @@ si__help:
   name: simple-inventory
   description: List or reset simple inventory feeders
   usage: /simple-inventory [player] [list/clear/rebuild/enable/disable/diag] [rebuild-radius-chunks]
-  permission: simple_inventory.list
+  permission: true
   debug: false
+  tab completions:
+    # This will complete any online player name for the second argument
+    1: <proc[get_all_players].parse[name]>
+    # This will complete "alpha" and "beta" for the first argument
+    2: list|clear|rebuild|enable|disable|diag
+    # This will allow flags "-a", "-b", or "-c" to be entered in the third, fourth, or fifth argument.
+    3: [radius]
   script:
       # Definitions
     - define owner <context.args.get[1]>
@@ -1386,7 +1393,7 @@ si__help:
             - narrate "<red>No inventory data stored." targets:<player>
         - else:
             - narrate "<red>Inventory Matrix." targets:<player>
-            - define inv_map <player.flag[si]>
+            - define inv_map <[owner].flag[si]>
             - foreach <[inv_map]> key:world_name as:world_list:
                 # Order of lists to process
                 - foreach <[preferred_list_order]> as:group_name:
@@ -1454,16 +1461,16 @@ si__help:
         - stop
 
     - if <[command]> == clear:
-        - flag <player> si:!
-        - narrate "<red>Inventory locations cleared for <[owner]>"
-        - narrate "<yellow>Click each sign/frame OR use /simple-inventory <player> repair"
+        - flag <[owner]> si:!
+        - narrate "<red>Inventory locations cleared for <[owner].name>"
+        - narrate "<yellow>Click each sign/frame OR use /simple-inventory <[owner].name> repair"
         - narrate <[enable_message]>
         - stop
 
     - if <[command]> == repair:
         - define radius <context.args.get[3]||5>
         - narrate "<green>Repairing <[radius]> radius chunks around player"
-        - run si_repair_triggers_nearby def:<[owner]>|<[radius]>
+        - run si_repair_triggers_nearby def:<[owner].name>|<[radius]>
         - narrate "<yellow>Move to next location and run again"
         - narrate <[enable_message]>
         - stop
