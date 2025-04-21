@@ -63,46 +63,6 @@ fxp_point_anvil:
   debug: false
 
   events:
-    # Fires when anvil result is calculated, lets us see cost
-    # this can fire 3-4 times but the cost to track and debounce is almost as high as just recalcuting so recalc (easier)
-    on player prepares anvil craft item:
-      # TODO: Consider changing this to do all work in pick up, this may make enchanter easier
-      #   Save player_lavel and player_xp to flags. That's it
-      #   In INVENTORY PICKUP (after event) claculate the actual level cost abse don new player level and flag
-      #     If there is no level change then assume no action and clear flags (TEST)
-      #   Use that to get XP point cost
-      #   set player exp to flag XP + point cost
-      #- if !<player.is_op>:
-      #  - stop
-
-      - define player <player>
-      - define cost_levels <context.repair_cost||0>
-      - define player_level <[player].xp_level>
-
-        # When cost is 0 or less (-1 was seen) ingrediants were probably removed or anvil canceled
-        # When levels are more than player has just let GUI tell them. Our cost calculations are ALWAYS less than GAME (XP Fair)
-        #    In both case CLEAR any excisting Anvil flag
-      - define prior_desired_xp <player.flag[fxp.anvil_desired_xp]||0>
-      - if <[cost_levels]> <= 0 or <[cost_levels].is_more_than[<[player_level]>]>:
-          - if <[prior_desired_xp]> 0:
-              - flag <[player]> fxp.anvil_desired_xp:!
-          - stop
-
-      - define player_xp <proc[fxp_points_for_player].context[<[player]>]>
-      - define cost_xp <proc[fxp_points_for_level].context[<[cost_levels]>]>
-      # checking foe xp is not need here since we are using LESS XP than the game so let the GUI handle the display check
-
-      # A duration is often used (duration 5s) to make sure the flag is cleared. In our case we  localize
-      # flags so I don't think this will be a problem and so no duration is used
-      #   Set a long duration so flag eventually garbage collects. But it should that on any anvil change die to cost check above
-      - define desired_xp <[player_xp].sub[<[cost_xp]>]>
-      # Very simple de-bouncer that does not require more flags
-      - if <[prior_desired_xp]> != <[desired_xp]>:
-        - flag <[player]> fxp.anvil_desired_xp:<[desired_xp]> duration:5m
-        - narrate "<gold>Fair XP cost: <[cost_xp]>"
-
-
-
     # Fires when player clicks the result slot to complete the anvil merge
     #   Inventory objct: <context.inventory||null>
     #   Inventory Type: <context.inventory.inventory_type||none>   -- (UPPERCASED) ANVIL / ...
@@ -110,6 +70,17 @@ fxp_point_anvil:
     #   Action : <context.action||null> -- (UPPERCASED) PLACE / PICKUP_ALL / NOTHING (usually not enough xp)
     #
     # On sucess will set player xp to the calculated level at anvil setup
+    #
+    # Algorithm:
+    #   The current and prior XP are used to POST adjust the Experience after Anvil cose (and any mods) were
+    #   applied. Then total level difference (see 'anvil craft item') is used to adjust the XP to fair use. This
+    #   algorhtm is not immediatly intuitive but it handles odd Minecraft and mod interaction
+    #     XP use may not always be available in the Anvil Cost caclaution (example; Disenchant mod does nto seem to set this).
+    #     Intercepting the ON event is a problem as this script can run in an non-deterministic order comapred to whe
+    #     XP is adjusted per internals. So it's best to do a POST cleanup,
+    #   Note that this is the ONLY even we need to monitor for this algorithm. And seems to be reliable but wa challening
+    #   to identiy the proper sequence.
+    #
     #   Limitation: If the player accumulated XP between placing items in anvil and taking result then they
     #   will loose that XP. This is considered rare and in any case, the loss is typical far less than what was gained with FAIR XP.
     #   The work around is a rather complex 'on player' check, followed by waiting for a clock tick then applying a COST adjustment.
@@ -119,42 +90,106 @@ fxp_point_anvil:
       #- if !<player.is_op>:
       #  - stop
 
-      - define player <player>
-
-
-      #- debug log "<red>Clicks in inventory: inventory -- <context.inventory||NA>"
-      #- debug log "<red>Clicks in inventory: inventory_type -- <context.inventory.inventory_type||NA>"
-      #- debug log "<red>Clicks in inventory: slot_type -- <context.slot_type||NA>"
-      #- debug log "<red>Clicks in inventory: action --  <context.action||NA>"
-
+      # Only monitor ANVIL
       - if <context.inventory.inventory_type||null> != ANVIL:
         - stop
-      - if <context.slot_type||null> != RESULT:
+
+      # - WARNING: THis gets tricky, the goal is to track the XP before an action is fired an ideally
+      # - set XP to 0 when slots are empty, but that's just nice.
+
+      - define player_prior_level <player.flag[fxp.anvil_prior_level]||0>
+      - define action <context.action>
+      - define slot_type <context.slot_type||element[]>
+      #- debug log "<gold>Slot: <[slot_type]> --- Action: <[action]>"
+
+      # Player is picking up RESULT item so fire XP corrector.
+      - if <[slot_type]> == RESULT and <[action]> == PICKUP_ALL:
+        # This call will only do something if an XP change was detected
+        - run fxp_adjust_player def:<player>
         - stop
-      - if <context.action||null> != PICKUP_ALL:
-        - narrate "<red>You are not a high enough level to perform this enchantment"
+
+      # An item was removed so clear values
+      #  CONTAINER is the inventory shown on the anvil, events here we do not really need to see and we do
+      #  not want to trigger storing prior XP
+      - if  <[slot_type]> != CONTAINER:
+        - if <[action]> == PICKUP_ALL:
+          # ****
+          # Clear cost flag anytime an item is picked up (RESULT pickup is done above)
+          - flag <player> fxp.anvil_prior_xp:!
+          - flag <player> fxp.anvil_prior_level:!
+        - else:
+          # Otherwise capture player XP
+          # - Use a timer long enough for a player to even do modest AFK, but still allow for auto cleanup
+          # - If a plyer foes AFK for longer than this, then click exactly on the result they will get charge the FULL amoumt, tough luck, sorry.
+          - flag <player> fxp.anvil_prior_level:<player.xp_level> duration:10m
+          - flag <player> fxp.anvil_prior_xp:<proc[fxp_points_for_player].context[<player>]> duration:10m
+
+      #- debug log "<red>SAVED XP: <player.flag[fxp.anvil_prior_xp]||0>"
+
+
+
+# === Adjust player EXP based on current and stored flags
+# - If there is no prior XP then exits
+# - If there is no XP change then exist
+# - Caclulates 
+fxp_adjust_player:
+  type: task
+  debug: false
+  definitions: player
+  script:
+
+      # Calculate difference between remembered XP and now. Then apply cost based on core XP for the level (from 0)
+      # an adjust player to that.
+      - define player_prior_level <[player].flag[fxp.anvil_prior_level]||0>
+      - define player_prior_xp <[player].flag[fxp.anvil_prior_xp]||0>
+      - if <[player_prior_xp]> == 0:
+        # Something is a bit odd, no prior data so SKIP
+        - debug log "<red>Prior XP Level cannot be identified. That's weird"
         - stop
 
-      # Get cost calculated when anvil was prepared, this flag may not be set if the anvil repair cost was not set or 0
-      - define player_desired_xp <[player].flag[fxp.anvil_desired_xp]||0>
-      - if <[player_desired_xp]>:
-          # Set player XP to exactly what it costs to perform the action. This allows any expereince
-          # that might be assigned to the player during the upcomming WAIT to still be abosrbed instead of lost
-          # While gaining XP from some event while processing the ANVIL action would be rare it is possible
-          - define minecraft_player_xp <proc[fxp_points_for_player].context[<player>]>
-          - define minecraft_player_level <player.xp_level>
-          # TIP: This 'set' works on absolute xp. THis is unlike Minecradts /expereince command where
-          # points are the amount accumulated between the current levels to the next level.
-          - experience set <[player_desired_xp]> player:<[player]>
-          - define fair_level <player.xp_level>
+      # Calculate the level change and the diffreence in XP. Handle ADD/SUB in case a mod does that
+      - define minecraft_player_level <player.xp_level>
+      - define minecraft_player_xp <proc[fxp_points_for_player].context[<player>]>
+      - define level_change <[player_prior_level].sub[<[minecraft_player_level]>]>
+      #- debug log "<green>Player Prior: <[player_prior_level]> -- After: <[minecraft_player_level]> -- Change: <[level_change]>"
 
-          - define savings_xp <[player_desired_xp].sub[<[minecraft_player_xp]>]>
-          - define savings_level <[fair_level].sub[<[minecraft_player_level]>]>
-          # Levels are not perfect due to rounding but hey, we will show it anyway
-          - narrate "<green>Fair XP savings: <[savings_xp]> points, <[savings_level]> level(s)"
+      - if <[level_change]> == 0:
+        - stop
 
-          # Clear cost flag
-          - flag <[player]> fxp.anvil_desired_xp:!
+      - if <[level_change]> < 0:
+        # Expected adjustment, subtract
+        - define sign 1
+      - else:
+        # SUpport adding experience in case a mod did that
+        - define sign -1
+
+      # Get experience points for level difference (absolute number as the process does not work well with negatves and normally does not need to)
+      # Adjust for xp adding (RARE) / dropping
+      #   Be sure to pass absolute  value then adjust based on sign of level change
+      - define xp_for_change <proc[fxp_points_for_level].context[<[level_change].abs>].mul[<[sign]>]>
+      - define player_desired_xp <[player_prior_xp].add[<[xp_for_change]>]>
+      #- debug log "<gold>Change: <[xp_for_change]> points, <[player_desired_xp]> level(s)"
+
+      - experience set <[player_desired_xp]> player:<[player]>
+
+      # ****
+      # Get feedback
+      - define fair_level <player.xp_level>
+      - define savings_xp <[player_desired_xp].sub[<[minecraft_player_xp]>]>
+      - define savings_level <[fair_level].sub[<[minecraft_player_level]>]>
+
+      # Levels are not perfect due to rounding but hey, we will show it anyway
+      #- debug log "<green>Fair XP savings: <[savings_xp]> points, <[savings_level]> level(s)"
+      - narrate "<green>Fair XP savings: <[savings_xp]> points, <[savings_level]> level(s)"
+
+      # **** 
+      # Clear cost flag
+      - flag <[player]> fxp.anvil_prior_xp:!
+      - flag <[player]> fxp.anvil_prior_level:!
+
+      - stop
+
+
 
 
 
@@ -164,12 +199,15 @@ fxp_points_for_player:
   debug: false
   definitions: player
   script:
+    # Level to lowest integer (floor)
     - define level <[player].xp_level>
+    # Get amount of XP the player has to the next level
     - define progress <[player].xp>
+    # Number of XP required to reach next level
     - define to_next <[player].xp_to_next_level>
-    - define base_xp <proc[fxp_points_for_level].context[<[level]>]>
+    # Convert level to XP
+    - define base_xp <proc[fxp_points_for_level].context[<[level].round_down>]>
 
-    # progress to next level is in percentage, we need it in decimal
     - define extra_xp <[progress].div[100].mul[<[to_next]>]>
     - define total_xp <[base_xp].add[<[extra_xp]>]>
     - determine <[total_xp].round_down>
@@ -190,6 +228,34 @@ fxp_points_for_level:
       - else:
         - define base_xp <[level].mul[4.5].mul[<[level]>].sub[<[level].mul[162.5]>].add[2220]>
 
-    # progress to next level is in percentage, we need it in decimal
+    # Not all callers can handle fractional amounts (points)
     - determine <[base_xp].round>
 
+
+
+
+resetworkcost:
+  type: command
+  name: resetworkcost
+  description: Resets the anvil work cost of the item in your hand.
+  usage: /resetworkcost
+  permission: true
+  script:
+    - define item <player.item_in_hand>
+    - if <[item].name> == air:
+        - narrate "<red>You must be holding an item to reset work cost."
+        - stop
+
+    - define current_cost <[item].repair_cost||0>
+    - narrate "<gray>Current work cost: <[current_cost]>"
+
+    #- define clean_item <[item].with[repair_cost=0]>
+    #- inventory set slot:<player.item_in_hand_slot> <[clean_item]> in:player
+    #- adjust <player.item_in_hand> repair_cost:0
+    #- define new_cost <player.item_in_hand.repair_cost>
+    #- narrate "<green>Work cost reset! New value: <[new_cost]>"
+
+    - define clean_item <[item].with[repair_cost=0]>
+    - give <[clean_item]> tO:<player> slot:hand
+    - define new_cost <player.item_in_hand.repair_cost>
+    - narrate "<green>B)Work cost reset! New value: <[new_cost]>"
