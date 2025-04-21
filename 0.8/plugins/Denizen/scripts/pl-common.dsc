@@ -139,8 +139,6 @@ should_run_this_tick:
     - define z <[location].z.round>
     - define hash <[x].mul[31].add[<[y].mul[13]>].add[<[z].mul[7]>].abs>
     - define tick_group <[hash].mod[<[group_size]>]>
-    - if <[debug]||0> == 1:
-      - debug log "<gold>Hash: <[hash]> -- <[tick_group]>"
     - determine <[tick_group].is[==].to[<util.current_tick.mod[<[group_size]>]>]>
 
 # ***
@@ -249,4 +247,5 @@ narrate_list:
 
         - foreach <[list]> as:line:
             - narrate "<[use_color]><[line]>" targets:<[target_player]>
+
 
