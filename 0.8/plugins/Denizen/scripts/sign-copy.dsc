@@ -78,6 +78,13 @@ sc__help:
   description: Control sign copy
   usage: /sign-copy [player] help/quiet/verbose]
   debug: false
+  permission: true
+  tab completions:
+    # This will complete any online player name for the second argument
+    1: <proc[get_all_players].parse[name]>
+    # This will complete "alpha" and "beta" for the first argument
+    2: help|quiet|verbose
+
   script:
       # Definitions
     - define owner <context.args.get[1]>
