@@ -131,14 +131,16 @@ powerlevel_blocks:
 # ***
 should_run_this_tick:
   type: procedure
-  definitions: location|group_size
+  definitions: location|group_size|debug
   debug: false
   script:
     - define x <[location].x.round>
     - define y <[location].y.round>
     - define z <[location].z.round>
-    - define hash <[x].mul[31].add[<[y].mul[13]>].add[<[z].mul[7]>]>
+    - define hash <[x].mul[31].add[<[y].mul[13]>].add[<[z].mul[7]>].abs>
     - define tick_group <[hash].mod[<[group_size]>]>
+    - if <[debug]||0> == 1:
+      - debug log "<gold>Hash: <[hash]> -- <[tick_group]>"
     - determine <[tick_group].is[==].to[<util.current_tick.mod[<[group_size]>]>]>
 
 # ***

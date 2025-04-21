@@ -499,7 +499,7 @@ si__remove_locations:
 
         # = More reliable. It is apparently unreliable to remove complex keys indivually via :<-: which aligns ith my experience with it being weird ...
         - define original <[player].flag[<[flag_path]>]>
-        - define keep_entries <[original].filter_tag[<[filter_value].get[t].equals[<[trigger_loc]>].not>]>
+        - define keep_entries <[original].filter_tag[<[filter_value].get[<[lookup_key]>].equals[<[trigger_loc]>].not>]>
         - if <[original].size> != <[keep_entries].size>:
             - flag <[player]> <[flag_path]>:<[keep_entries]>
             - define new <[player].flag[<[flag_path]>]>
@@ -783,8 +783,9 @@ si__process_sign_text:
         - define sign_lines <[sign_lines].remove[1]>
         - define sign_spec <[sign_lines].separated_by[|]>
 
-        - define tokens <[sign_spec].to_lowercase.replace[<[open]>].with[ ].replace[<[close]>].with[ ].split[regex:\s+|\||,]>
+        - define tokens <[sign_spec].to_lowercase.replace[<[open]>].with[ ].replace[<[close]>].with[ ].split[regex:\s+|\||,-]>
         - define known_facings <list[n|s|e|w|u|d]>
+        - define template null
         - foreach <[tokens]> as:token:
             - define token <[token].trim>
             - if !<[token]>:
@@ -796,6 +797,18 @@ si__process_sign_text:
                 - if <[token].starts_with[regex]>:
                     - define accum_messages <[accum_messages].include["<red>Regex not supported in sign options, skipping (<[token]>)"]>
                     - foreach next
+
+                - if <[token].contains_text[%]>:
+                    # Group tokenization
+                    - define template <[token]>
+                    #- debug log "<red>:Template found: <[template]>"
+                    - foreach next
+
+                - if <[template]>:
+                    - define token <[template].replace_text[%].with[<[token]>]>
+                    #- debug log "<red>Template resolved: <[token]>"
+                    # Fall through to process this new token
+
                 - if <item[<[token]>].exists>:
                     - define accum_items:->:<[token]>
                     - foreach next
@@ -992,19 +1005,18 @@ si__process_feeders:
 
             # Get all feeders for for this player/world
             - define feeders <[owner].flag[si.<[world_name]>.feeder].if_null[<list[]>]>
-
             # Add each of these to the master list
             - foreach <[feeders]> as:feeder :
                 # A bit of a hack to add particales for anY JAM
                 - define feeder_loc <[feeder].get[t].block>
                 - define diag_key <[owner].name>.<[world_name]>.<[feeder_loc]>
 
-                # If null does not work in this case, so use alternate style
-                - define prior_log <[diag_log_prior].deep_get[<[diag_key]>]||"">
+                # Make sure prior log is sane
+                - define prior_log <[diag_log_prior].deep_get[<[diag_key]>]||<element[]>>
+
                 # ONly add feeders that are applicable to the current tick
                 - if <proc[should_run_this_tick].context[<[feeder_loc]>|<[feeder_tick_delay]>]>:
                     - define feeder_master_list:->:<list[<[owner]>|<[feeder]>]>
-                    #- debug log "<red>Feeder: <[feeder]>"
                     - if <[prior_log].starts_with[JAM]>:
                         - if !<[feeder].get[q].if_null[0]>:
                             # Adjust effect location, note that the playeffec.offset is more a random flucation around each particale effect so is not precise for positioning
@@ -1018,7 +1030,7 @@ si__process_feeders:
                             #- define effect_loc <[feeder_loc].add[.5,1,.5]>
                             #- playeffect <[effect_loc]> effect:item special_data:pumpkin quantity:2 offset:0.1,0.1,0.1 visibility:10 velocity:0,.1,0
                 - else:
-                    # PRESERVE log diagnostics for othe ticks, these shoudl not be cleared if they are set.
+                    # PRESERVE log diagnostics for other ticks, these should not be cleared if they are set.
                     # They are just being SKIPPED because the do-on-tick x failed for the current tick
                     # Only preserve KNOWN feders so we an an auto GC.
                     - if <[prior_log]>:
@@ -1033,8 +1045,9 @@ si__process_feeders:
             - define feeder <[feeder_to_process].get[2]>
             - define diag_key <[owner].name>.<[world_name]>.<[feeder].get[t].block>
             # Unless something odd happened this staet should be replaced by one of the others, if its seen look for issues
-            - define diag_state "Info: not processed"
-            - define diag_log <[diag_log].deep_with[<[diag_key]>].as[<[diag_state]>]>
+            # Do NOT store this in feeder log, it erases the last move data
+            #- define diag_state "Info: not processed"
+            #- define diag_log <[diag_log].deep_with[<[diag_key]>].as[<[diag_state]>]>
 
             # When this becomes true the current feeder is DONE
             - define move_completed false
@@ -1043,6 +1056,7 @@ si__process_feeders:
             - define feeer_loc <[feeder].get[t]>
             - if <[feeder_loc].chunk.is_loaded.not>:
                 - define diag_state "Info: chunk not loaded"
+                - define diag_log <[diag_log].deep_with[<[diag_key]>].as[<[diag_state]>]>
                 - foreach next
 
             # Check chest location
@@ -1069,8 +1083,9 @@ si__process_feeders:
 
             # If empty then nothing to do so exit
             - if <[feeder_inventory].is_empty>:
-                - define diag_state "Info: empty"
-                - define diag_log <[diag_log].deep_with[<[diag_key]>].as[<[diag_state]>]>
+                # Do NOT store this in feeder log, it erases the last move data
+                #- define diag_state "Info: empty"
+                #- define diag_log <[diag_log].deep_with[<[diag_key]>].as[<[diag_state]>]>
                 - foreach next
 
             - define feeder_facings <[feeder].get[face].if_null[<list[]>]>
@@ -1274,13 +1289,17 @@ si__process_feeders:
                         # All OK, initiate a move
                         - define from <proc[location_noworld].context[<[feeder_chest]>]>
                         - define to <proc[location_noworld].context[<[target_chest]>]>
-                        - define diag_state "Info: <[items_to_move]> <[feeder_item_name]> FROM <[from]> TO <[to]> PER <[list_name]> list"
+                        - define diag_state "Info: <[items_to_move]> <[feeder_item_name]> : [<[from]>]  To  [<[to]>] PER <[list_name]> list"
                         - define diag_log <[diag_log].deep_with[<[diag_key]>].as[<[diag_state]>]>
 
                         # Transfer item
                         #   Note we need to specify quantity force more than one on TAKE
+                        #   WARNING: use the original feeder_item NOT the name (which looses NBT data)
+                        #       Taking the item cannot be an ITEM, it might need to be a SLOT but let's see if the
+                        #       name works, but we need to store the actual ITEM
                         - take item:<[feeder_item_name]> quantity:<[items_to_move]> from:<[feeder_chest].inventory>
-                        - give item:<[feeder_item_name]> quantity:<[items_to_move]> to:<[target_chest].inventory>
+                        - give item:<[feeder_item]> quantity:<[items_to_move]> to:<[target_chest].inventory>
+                        #- debug log "<gold><[diag_state]>"
                         - define counter <[counter].add[1]>
                         # This is used to allow a more intelligent loop exit logig that can leave multiple levels base don logic
                         - define move_completed true
@@ -1470,6 +1489,7 @@ si__help:
             - foreach <[feeders]> key:feeder_loc as:status :
                 - narrate "<green><[feeder_loc]> : <[status]>" targets:<[owner]>
 
+        - debug log "<[log_player]>"
 
 # ***
 # *** Reapir by finding all signs within range of the character
@@ -1670,7 +1690,7 @@ benchmark_proc_vs_inline:
 
 # ESCAPE/UNESCAPE is VERY fast at 40ms oer 10,000 for a resonable
 # size map.
-# 
+#
 # But an unreasonbale sized match, like an simple inventory flag map that is a a few KB
 # is VERY SLOW:
 #   4139 ms  for 10,000
