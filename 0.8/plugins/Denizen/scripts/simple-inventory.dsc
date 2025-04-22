@@ -64,10 +64,11 @@ si_config:
             max_quantity: 64
 
             # Minimum and maximum distance
-            #   Use a minium of .5 to prevent a feeder placing items into self if also an inventory
+            #   Use 0 to disable, but there is still a safety to prevent recursion even on double chests
+            #   Use a minium of .5 to prevent a feeder placing items into self if also an inventory (no longer necessary)
             #   Use a 1 to prevent macthing NSEWUP of container
             #   Use 1 .5 to also prevent diaganols, which can help make the setup more consistent. From a human perspective 1 block shoudl includ diagnols
-            min_distance: 1.5
+            min_distance: 0
 
             # THis is a block radius as a cuboid. It should be around 2x the bed-shunk plugins range (5)
             # so a chest on one end of a base can reach the other without goign across the world.
@@ -497,13 +498,26 @@ si__remove_locations:
     - if <[player].has_flag[<[flag_path]>]>:
         #- debug log "<green>Key: <[lookup_key]> -- <[trigger_loc]>""
 
-        # = More reliable. It is apparently unreliable to remove complex keys indivually via :<-: which aligns ith my experience with it being weird ...
-        - define original <[player].flag[<[flag_path]>]>
-        - define keep_entries <[original].filter_tag[<[filter_value].get[<[lookup_key]>].equals[<[trigger_loc]>].not>]>
-        - if <[original].size> != <[keep_entries].size>:
-            - flag <[player]> <[flag_path]>:<[keep_entries]>
-            - define new <[player].flag[<[flag_path]>]>
+        # = NOTE: It is apparently unreliable to remove complex keys indivually via :<-: which aligns with my experience with it being weird ...
+        # = NOTE: This algiorthm us great and FAST but it does not allow cleanup of diag logs for removed feeders
+        #- define original <[player].flag[<[flag_path]>]>
+        #- define keep_entries <[original].filter_tag[<[filter_value].get[<[lookup_key]>].equals[<[trigger_loc]>].not>]>
+        #- if <[original].size> != <[keep_entries].size>:
+        #    - flag <[player]> <[flag_path]>:<[keep_entries]>
+        #    - define new <[player].flag[<[flag_path]>]>
+        #- stop
+
+        - define world_name <[trigger_loc].world.name>
+        - define diag_key <[player].name>.<[world_name]>.<[trigger_loc].block>
+
+        - define remove_entries <[player].flag[<[flag_path]>].filter_tag[<[filter_value].get[<[lookup_key]>].equals[<[trigger_loc]>]>]>
+        - foreach <[remove_entries]> as:entry :
+            #- debug log "<red>Remove: <[flag_path]> :: <[trigger_loc]> -- <[entry]>"
+            - flag <[player]> <[flag_path]>:<-:<[entry]>
+            - if <server.has_flag[si_diag.<[diag_key]>]>:
+                - flag server si_diag.<[diag_key]>:!
         - stop
+
 
         # THis method is likley faster for cases needing one or zero deletes, COMMON - BUT it can have issues with removing complex items (MAYBE)
         #- define log <Element[]>
@@ -984,8 +998,8 @@ si__process_feeders:
     #  But if the feeder is skipped really early (due to tick mod check)
     #  then there is and should notbe a diag message. SO we need to preserve it
     #  Note: It is faster to do this than havea GC to remove old unused log entries
-    - define diag_log_prior <server.flag[si_diag].if_null[<map[]>]>
-    - define diag_log <map[]>
+    - define diag_log <server.flag[si_diag].if_null[<map[]>]>
+    #- define diag_log <map[]>
 
     # Loop on each world and limit processing per world
     - foreach <[all_worlds]> as:world:
@@ -1009,16 +1023,16 @@ si__process_feeders:
             - foreach <[feeders]> as:feeder :
                 # A bit of a hack to add particales for anY JAM
                 - define feeder_loc <[feeder].get[t].block>
-                - define diag_key <[owner].name>.<[world_name]>.<[feeder_loc]>
-
-                # Make sure prior log is sane
-                - define prior_log <[diag_log_prior].deep_get[<[diag_key]>]||<element[]>>
 
                 # ONly add feeders that are applicable to the current tick
                 - if <proc[should_run_this_tick].context[<[feeder_loc]>|<[feeder_tick_delay]>]>:
                     - define feeder_master_list:->:<list[<[owner]>|<[feeder]>]>
-                    - if <[prior_log].starts_with[JAM]>:
-                        - if !<[feeder].get[q].if_null[0]>:
+                    # Particales only occur if NTO quiet
+                    - if !<[feeder].get[q].if_null[0]>:
+                        - define diag_key <[owner].name>.<[world_name]>.<[feeder].get[t].block>
+                        - define log <[diag_log].deep_get[<[diag_key]>]||element[]>
+
+                        - if <[log].starts_with[JAM]>:
                             # Adjust effect location, note that the playeffec.offset is more a random flucation around each particale effect so is not precise for positioning
                             # - For angry_villager a single particale is visible fine and lower lag on client than 2
                             - define effect_loc <[feeder_loc].add[.5,.0,.5]>
@@ -1029,12 +1043,6 @@ si__process_feeders:
                             # = Item particles are quite cool and fun, bu carry some load for the client, stick to more basic
                             #- define effect_loc <[feeder_loc].add[.5,1,.5]>
                             #- playeffect <[effect_loc]> effect:item special_data:pumpkin quantity:2 offset:0.1,0.1,0.1 visibility:10 velocity:0,.1,0
-                - else:
-                    # PRESERVE log diagnostics for other ticks, these should not be cleared if they are set.
-                    # They are just being SKIPPED because the do-on-tick x failed for the current tick
-                    # Only preserve KNOWN feders so we an an auto GC.
-                    - if <[prior_log]>:
-                        - define diag_log <[diag_log].deep_with[<[diag_key]>].as[<[prior_log]>]>
 
             # Randomize this list for fairness
             - define feeder_master_list <[feeder_master_list].random[<[feeder_master_list].size>]>
@@ -1053,11 +1061,12 @@ si__process_feeders:
             - define move_completed false
 
             # Check feeder location (trigger)
-            - define feeer_loc <[feeder].get[t]>
+            - define feeder_loc <[feeder].get[t]>
             - if <[feeder_loc].chunk.is_loaded.not>:
                 - define diag_state "Info: chunk not loaded"
                 - define diag_log <[diag_log].deep_with[<[diag_key]>].as[<[diag_state]>]>
                 - foreach next
+
 
             # Check chest location
             - define feeder_chest <[feeder].get[c]>
@@ -1065,6 +1074,9 @@ si__process_feeders:
                 - define diag_state "Info: chunk not loaded"
                 - define diag_log <[diag_log].deep_with[<[diag_key]>].as[<[diag_state]>]>
                 - foreach next
+            # Get other feeder chest (double chest), if none just set to self. Makes for faster code as we save multiple ifs later
+            - define feeder_chest_other <[feeder_chest].other_block.if_null[<[feeder_chest]>]>
+
 
             # If feeder chest is powered skip it
             - define is_powered <proc[powerlevel_blocks].context[<[feeder_chest]>]>
@@ -1266,6 +1278,11 @@ si__process_feeders:
                         - if <[is_powered]> > 0:
                             - foreach next
 
+                        # If feeder and target chest are the same, then that would cause recursion so avoid
+                        #   A min distance 1.1 would also resolve this but that is not always desired as it makes feeders inside storage walls more challenging
+                        - if <[target_chest].block> == <[feeder_chest].block> or  <[target_chest].block> == <[feeder_chest_other].block>:
+                            - foreach next
+
                         # DO a FAST check here to avoid excpetions. If things need repaired that
                         # can be done with commands. If abuse occurs (not sure I care) we can address that later
                         - define target_inventory <[target_chest].inventory.if_null[null]>
@@ -1289,7 +1306,7 @@ si__process_feeders:
                         # All OK, initiate a move
                         - define from <proc[location_noworld].context[<[feeder_chest]>]>
                         - define to <proc[location_noworld].context[<[target_chest]>]>
-                        - define diag_state "Info: <[items_to_move]> <[feeder_item_name]> : [<[from]>]  To  [<[to]>] PER <[list_name]> list"
+                        - define diag_state "Info: Moved <[items_to_move]> <[feeder_item_name]> : [<[from]>]  To  [<[to]>] PER <[list_name]> list matched on (<[target].get[f]||anything>)"
                         - define diag_log <[diag_log].deep_with[<[diag_key]>].as[<[diag_state]>]>
 
                         # Transfer item
@@ -1299,7 +1316,6 @@ si__process_feeders:
                         #       name works, but we need to store the actual ITEM
                         - take item:<[feeder_item_name]> quantity:<[items_to_move]> from:<[feeder_chest].inventory>
                         - give item:<[feeder_item]> quantity:<[items_to_move]> to:<[target_chest].inventory>
-                        #- debug log "<gold><[diag_state]>"
                         - define counter <[counter].add[1]>
                         # This is used to allow a more intelligent loop exit logig that can leave multiple levels base don logic
                         - define move_completed true
@@ -1494,7 +1510,7 @@ si__help:
         - foreach <[log_player]> key:world as:feeders :
             - narrate "<gold><[owner_name]> / <[world]>" targets:<[owner]>
             - foreach <[feeders]> key:feeder_loc as:status :
-                - narrate "<green><[feeder_loc]> : <[status]>" targets:<[owner]>
+                - narrate "<green><[status]>" targets:<[owner]>
 
         - debug log "<[log_player]>"
 
