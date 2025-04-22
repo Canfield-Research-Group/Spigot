@@ -1,0 +1,20 @@
+[
+  {
+    "uuid": "4dafaae0-6574-47aa-b708-5684c71940bf",
+    "name": "dread6ix",
+    "level": 4,
+    "bypassesPlayerLimit": false
+  },
+  {
+    "uuid": "0d1b9c23-2aca-410f-b187-598979e800e0",
+    "name": "mrakavin",
+    "level": 4,
+    "bypassesPlayerLimit": false
+  },
+  {
+    "uuid": "dee4411f-261e-4dd7-8c02-f28b73c2861f",
+    "name": "dj_urgarden",
+    "level": 4,
+    "bypassesPlayerLimit": false
+  }
+]
