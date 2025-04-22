@@ -237,17 +237,35 @@ fxp_points_for_level:
 resetworkcost:
   type: command
   name: resetworkcost
-  description: Resets the anvil work cost of the item in your hand.
-  usage: /resetworkcost
+  description: EXPERIMETNAL Resets the anvil work cost of the item in your hand.
+  usage: /resetworkcost new_cost
+  definitions: new_cost
   permission: true
+  tab completions:
+    # This will complete any online player name for the second argument
+    1: [new_cost (ops only)]
+
   script:
+    - define new_cost <context.args.get[1]||null>
     - define item <player.item_in_hand>
-    - if <[item].name> == air:
+    - debug log  "<red>Item: <[item].material.name>"
+    - define item_name <[item].material.name||air>
+    - if <[item_name]> == air:
         - narrate "<red>You must be holding an item to reset work cost."
         - stop
 
     - define current_cost <[item].repair_cost||0>
-    - narrate "<gray>Current work cost: <[current_cost]>"
+    - narrate "<gray>Current work cost for <yellow><[item_name]><gray> is <yellow>: <[current_cost]>"
+
+    - debug log  "<red>New Cost: <[new_cost]>"
+
+    - if <[new_cost]||null> == null:
+      - stop
+
+    - if <player.is_op.not>:
+      - narrate "<red>Only ops can change work cost"
+      - stop
+
 
     #- define clean_item <[item].with[repair_cost=0]>
     #- inventory set slot:<player.item_in_hand_slot> <[clean_item]> in:player
@@ -255,7 +273,7 @@ resetworkcost:
     #- define new_cost <player.item_in_hand.repair_cost>
     #- narrate "<green>Work cost reset! New value: <[new_cost]>"
 
-    - define clean_item <[item].with[repair_cost=0]>
-    - give <[clean_item]> tO:<player> slot:hand
-    - define new_cost <player.item_in_hand.repair_cost>
-    - narrate "<green>B)Work cost reset! New value: <[new_cost]>"
+    # == SEE: https://guide.denizenscript.com/guides/basics/mechanisms.html#how-to-adjust-items
+    - inventory adjust slot:hand repair_cost:<[new_cost]>
+    - define adjusted_cost <player.item_in_hand.repair_cost>
+    - narrate "<green>Work cost changed! New value: <[adjusted_cost]>"
