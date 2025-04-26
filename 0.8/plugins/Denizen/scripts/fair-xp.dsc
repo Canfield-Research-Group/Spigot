@@ -47,7 +47,7 @@ fxp_commands:
     - narrate "<gold>Player XP Details"
     - define player_level <player.xp_level>
     - narrate "XP Level: <[player_level]>"
-    - define calculated <proc[fxp_points_for_player].context[<player>]>
+    - define calculated <proc[xp_points_for_player].context[<player>]>
     - narrate "XP Points: <[calculated]>"
     - narrate "Progress to next level: <player.xp>%"
     - narrate "XP to next level: <player.xp_to_next_level>"
@@ -122,7 +122,7 @@ fxp_point_anvil:
           # - Use a timer long enough for a player to even do modest AFK, but still allow for auto cleanup
           # - If a plyer foes AFK for longer than this, then click exactly on the result they will get charge the FULL amoumt, tough luck, sorry.
           - flag <player> fxp.anvil_prior_level:<player.xp_level> duration:10m
-          - flag <player> fxp.anvil_prior_xp:<proc[fxp_points_for_player].context[<player>]> duration:10m
+          - flag <player> fxp.anvil_prior_xp:<proc[xp_points_for_player].context[<player>]> duration:10m
 
       #- debug log "<red>SAVED XP: <player.flag[fxp.anvil_prior_xp]||0>"
 
@@ -149,7 +149,7 @@ fxp_adjust_player:
 
       # Calculate the level change and the diffreence in XP. Handle ADD/SUB in case a mod does that
       - define minecraft_player_level <player.xp_level>
-      - define minecraft_player_xp <proc[fxp_points_for_player].context[<player>]>
+      - define minecraft_player_xp <proc[xp_points_for_player].context[<player>]>
       - define level_change <[player_prior_level].sub[<[minecraft_player_level]>]>
       #- debug log "<green>Player Prior: <[player_prior_level]> -- After: <[minecraft_player_level]> -- Change: <[level_change]>"
 
@@ -166,7 +166,7 @@ fxp_adjust_player:
       # Get experience points for level difference (absolute number as the process does not work well with negatves and normally does not need to)
       # Adjust for xp adding (RARE) / dropping
       #   Be sure to pass absolute  value then adjust based on sign of level change
-      - define xp_for_change <proc[fxp_points_for_level].context[<[level_change].abs>].mul[<[sign]>]>
+      - define xp_for_change <proc[xp_points_for_level].context[<[level_change].abs>].mul[<[sign]>]>
       - define player_desired_xp <[player_prior_xp].add[<[xp_for_change]>]>
       #- debug log "<gold>Change: <[xp_for_change]> points, <[player_desired_xp]> level(s)"
 
@@ -189,53 +189,9 @@ fxp_adjust_player:
 
       - stop
 
-
-
-
-
-# === Get current points for a player (round down)
-fxp_points_for_player:
-  type: procedure
-  debug: false
-  definitions: player
-  script:
-    # Level to lowest integer (floor)
-    - define level <[player].xp_level>
-    # Get amount of XP the player has to the next level
-    - define progress <[player].xp>
-    # Number of XP required to reach next level
-    - define to_next <[player].xp_to_next_level>
-    # Convert level to XP
-    - define base_xp <proc[fxp_points_for_level].context[<[level].round_down>]>
-
-    - define extra_xp <[progress].div[100].mul[<[to_next]>]>
-    - define total_xp <[base_xp].add[<[extra_xp]>]>
-    - determine <[total_xp].round_down>
-
-# === Get points for a specific level. This forces whole number levels only (round down)
-# Best used to identify how many points a cost of 5 levels means without regard to current players level.
-fxp_points_for_level:
-  type: procedure
-  debug: false
-  definitions: level
-  script:
-    - define level <[level].round_down>
-    - if <[level].is_less_than_or_equal_to[16]>:
-      - define base_xp <[level].mul[<[level]>].add[<[level].mul[6]>]>
-    - else :
-      - if <[level].is_less_than_or_equal_to[31]>:
-          - define base_xp <[level].mul[2.5].mul[<[level]>].sub[<[level].mul[40.5]>].add[360]>
-      - else:
-        - define base_xp <[level].mul[4.5].mul[<[level]>].sub[<[level].mul[162.5]>].add[2220]>
-
-    # Not all callers can handle fractional amounts (points)
-    - determine <[base_xp].round>
-
-
-
-
 resetworkcost:
   type: command
+  debug: false
   name: resetworkcost
   description: EXPERIMETNAL Resets the anvil work cost of the item in your hand.
   usage: /resetworkcost new_cost
@@ -277,3 +233,4 @@ resetworkcost:
     - inventory adjust slot:hand repair_cost:<[new_cost]>
     - define adjusted_cost <player.item_in_hand.repair_cost>
     - narrate "<green>Work cost changed! New value: <[adjusted_cost]>"
+
