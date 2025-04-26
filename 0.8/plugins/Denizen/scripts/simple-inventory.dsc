@@ -24,7 +24,7 @@
 #   * wildcard = [t=tirgger-location,c=chest-location],w=item-name]
 #   * feeder =  [t=tirgger-location,c=chest-location],t=item-name]
 #
-# 
+#
 #
 # ------------------------------------------------------------------------------
 
@@ -39,53 +39,6 @@
 #   not relevant. For performance is happens after all wildcards.
 #       See if performance is that critical or maybe we should look through each ???
 #       or maybe '!' is not very useful.
-
-# ***
-# *** Configuration data
-# ***
-si_config:
-    type: data
-    data:
-        # Access to this data: define max_items <script[si_config].data_key[data].get[feeder].get[max_items]>
-        feeder:
-            # Feeder location data (trigger) is proccessed every x ticks where the x is calculated
-            # by a simple hash that when moded by tick_delay being zero the feeder is processed.
-            #   Use 0 to fire every tick, useful for debugging
-            #   10 for one stack per feeder per 0.5 seconds (the others seem WAY to fast for our game)
-            #    5 for one stack per feeder per 0.25 seconds
-            #   NOTE: If players game this by just doubling the feeders, we may need to deal wth that somehow.
-            #   But if reasonable complaints arrive we can just set tick delay per to 5
-            tick_delay: 10
-
-            # TODO:  maximum number of slots that can be moved per pass from each feeder
-            #max_slots: 1
-
-            # Maximum items that is allowed to be transfered per pass. Normally maximum slot size is 64
-            max_quantity: 64
-
-            # Minimum and maximum distance
-            #   Use 0 to disable, but there is still a safety to prevent recursion even on double chests
-            #   Use a minium of .5 to prevent a feeder placing items into self if also an inventory (no longer necessary)
-            #   Use a 1 to prevent macthing NSEWUP of container
-            #   Use 1 .5 to also prevent diaganols, which can help make the setup more consistent. From a human perspective 1 block shoudl includ diagnols
-            min_distance: 0
-
-            # THis is a block radius as a cuboid. It should be around 2x the bed-shunk plugins range (5)
-            # so a chest on one end of a base can reach the other without goign across the world.
-            #   Radisu of 5 chunks menas a base that can be 11 chunks by 11 chunks. Each chunk is 16 so 176
-            #   blocks. And that is a radius. So feeders operate in a  radius 10 meaning 11x11 (which is the entire chunk vertically. I might need to fix that)
-            max_distance: 176
-
-            # Maximum runtime before issuing a wait (there is 50ms oer tick) expressed in ms
-            max_runtime: 15
-            # How long to wait after reaching max_runtime
-            wait_time: 1t
-
-            # list order. Users will need to force this into a list:
-            #       ....get[list_order].as[list]
-            # Feeders should NOT be in tis list, those are handled seperately
-            list_order: item|wildcard|overflow_item|overflow_wildcard|overflow_fallback|unknown
-
 
 # ====== Inventory Hanlding STARTUP
 # = TO Stop from console
@@ -974,8 +927,8 @@ si__process_feeders:
     - define elapsed_distance 0
     - define elapsed_setup 0
     - define elapsed_move 0
+    - define feeder_constants <proc[pl__config].context[simple-inventory.feeder]>
 
-    - define feeder_constants <script[si_config].data_key[data].get[feeder]>
     - define feeder_tick_delay <[tick_delay].if_null[<[feeder_constants].get[tick_delay]>]>
     - define min_distance <[feeder_constants].get[min_distance]>
     - define max_distance <[feeder_constants].get[max_distance]>
@@ -1353,7 +1306,7 @@ si__help:
     - define command <context.args.get[2]||help>
     - define radius <context.args.get[3]||5>
 
-    - define feeder_constants <script[si_config].data_key[data].get[feeder]>
+    - define feeder_constants <proc[pl__config].context[simple-inventory.feeder]>
     - define preferred_list_order <list[feeder].include[<[feeder_constants].get[list_order].as[list]>]>
 
     # Help block (called when command is missing or unknown)
@@ -1586,8 +1539,8 @@ si__range_normalize:
   debug: false
   definitions: range
   script:
-    - define max_distance <script[si_config].data_key[data].get[feeder].get[max_distance]>
-    - define min_distance <script[si_config].data_key[data].get[feeder].get[min_distance]>
+    - define max_distance <proc[pl__config].context[simple-inventory.feeder.max_distance]>
+    - define min_distance <proc[pl__config].context[simple-inventory.feeder.min_distance]>
     - if !<[range]>:
         - determine <[max_distance]>
     - if <[range]> <= <[min_distance]>:

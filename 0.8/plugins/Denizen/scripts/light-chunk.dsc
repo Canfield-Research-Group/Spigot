@@ -1,24 +1,20 @@
 # === Light a chunk with torches
-#  TODO: find a spawnable blocks with 16x16x16 ciboid based on player current chunk
-#  TODO: Pull torch from player inventory and place it
-#  TODO: wait 1 tick and repeat for every block that is spawnable IN cubiod
-#  TODO: charge EXP for each torch placed approx 1 level of exp points (adjust to be fair)
-#  TODO: if player moves stop placing torches
-#  TODO: if player is already placing torches do not allow movement
 
 
 # Event trigger: Player left-clicks a block with a stick while holding a torch in the off-hand
+# - use a restone torch as a MAGIC WAND with off hand being the type
 torch_trigger:
   type: world
   debug: false
   events:
-    on player left clicks block with:torch :
+    on player left clicks block with:redstone_torch :
         - if <player.item_in_offhand.material.name> == torch:
             - run torch_placer def:<player>
+            - stop
 
-    on player left clicks block with:emerald_block :
-        - run mobcount def:<player>
-
+        - if <player.item_in_offhand.material.name> == emerald_block:
+            - run mobcount def:<player>
+            - stop
 
 torch_placer:
   type: task
@@ -26,13 +22,14 @@ torch_placer:
   definitions: player
   script:
     - define start <util.current_time_millis>
-    - define xp_cost_per_torch 10
+    - define xp_cost_per_torch <proc[pl__config].context[light-chunk.torch.xp_points]>
+
     - if <[player].inventory.contains_item[torch].not> :
         - narrate "<red>You are out of torches, cannot autoplace."
         - stop
 
     - if <proc[xp_points_of_player].context[<[player]>]> < 10 :
-        - narrate "<red>Not enough XP to place a torch (<[xp_cost_per_torch]>)."
+        - narrate "<red>Not enough XP to place a torch w(<[xp_cost_per_torch]>)."
         - stop
 
     - define base_loc <[player].location>
@@ -85,7 +82,7 @@ mobcount:
     # XP of 103 points is around level6.57 and allows 2 scans at level 10
     #   Level 30 is 1,395 points allowing 13 scans for mobs
     #   The 90 XM is probably too low
-    - define xp_cost_per_mob_query 90
+    - define xp_cost_per_mob_query <proc[pl__config].context[light-chunk.mobcount.xp_points]>
     - if <proc[xp_points_of_player].context[<player>]> < <[xp_cost_per_mob_query]> :
         - narrate "<red>Not enough XP to do a mob scan (<[xp_cost_per_mob_query]>)."
         - stop
@@ -112,10 +109,52 @@ mobcount:
         - narrate "<red>No monstores found in range <[radius]> of player, , XP Cost: <[xp_cost_per_mob_query]>"
     - else:
         - narrate "<red>Monstors within <[radius]> of player: <[mobs].size>, XP Cost: <[xp_cost_per_mob_query]>"
-        - if <player.is_op>:
-            - define l <proc[location_noworld].context[<[nearest_mob].location>]>
-            - narrate "<red>Nearest mob <[nearest_mob].name> at distance <[nearest_distance]> at location <[l]>"
+        - define l <[nearest_mob].location>
+        - if false and <player.is_op>:
+            # Allow ops to see exact location (cleaner)
+            - define l <proc[location_noworld].context[<[l]>]>
+            - narrate "<gold>Nearest mob <[nearest_mob].name> at distance <[nearest_distance]> at location <[l]>"
         - else:
-            - narrate "<red>Nearest mob <[nearest_mob].name> at distance <[nearest_distance]>"
+            # Everyone else gets the chunk center
+            - define near_x <[l].x.div[16].round_down.mul[16].add[8]>
+            - define near_y <[l].y.div[16].round_down.mul[16].add[8]>
+            - define near_z <[l].z.div[16].round_down.mul[16].add[8]>
+            - narrate "<gold>Nearest mob <[nearest_mob].name> at distance <[nearest_distance]> near (<[near_x]>, <[near_y]>, <[near_z]>)"
 
     - experience take <[xp_cost_per_mob_query]> player:<player>
+
+
+lc__help:
+  type: command
+  name: light-chunk
+  description: Mobs and Light control
+  usage: /light-chunk [help]
+  permission: true
+  debug: false
+  tab completions:
+    1: help
+  script:
+    # Definitions
+    #   none
+
+    - define show_help true
+    - define xp_cost_per_torch  <script[lc__config].data_key[data].get[torch].get[xp_points]>
+    - define xp_level_torch <proc[xp_level_from_points].context[<[xp_cost_per_torch]>]>
+    - define xp_cost_per_mob_query  <script[lc__config].data_key[data].get[mobcount].get[xp_points]>
+    - define xp_level_mob_query <proc[xp_level_from_points].context[<[xp_cost_per_mob_query]>]>
+
+    - if <[show_help]>:
+        - narrate "<gold>Light Chunk Help:"
+        - narrate "<gold>Equip a redstone torch as active item."
+        - narrate "<gold>This acts as a 'magic wand'and is activated by stricking."
+        - narrate "<gold>A block. All actions are based on players CURRENT LOCATION"
+        - narrate "<gold>not the block stricked."
+        - narrate "<gold>Action is controlled by <yellow>offhand item"
+        - narrate "  <yellow>Torch: Place torch on nearest spawnable dark block"
+        - narrate "  <gold>  within PLAYERS cube 16x16x16 aligned on chunk boarder"
+        - narrate "  <gold>  Low XP cost <red>(<[xp_cost_per_torch]> / <[xp_level_torch]>L)<gold> to place, 0 xp if chunk is lit"
+        - narrate "  <yellow>Emerald Block: Scans 128 blocks (not chunk aligned)."
+        - narrate "  <gold>  Lists mob types found, count and distance/chunk cords to nearest mob"
+        - narrate "  <gold>  Moderate XP cost <red>(<[xp_cost_per_mob_query]> / <[xp_level_mob_query]>L)"
+        - stop
+

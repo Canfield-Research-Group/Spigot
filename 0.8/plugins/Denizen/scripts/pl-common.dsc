@@ -291,3 +291,24 @@ xp_points_for_level:
 
     # Not all callers can handle fractional amounts (points)
     - determine <[base_xp].round>
+
+# === Procedure: Get level from XP points (rounded up to 1 decimal place)
+# Uses iterative way to locate level, which is probably fine, likley fast enough for anything except extreme levels
+# Craeted for use in HELP to express XP costs for tasks using XP points in a way more familier to players
+xp_level_from_points:
+  type: procedure
+  debug: false
+  definitions: xp_points
+  script:
+  - define xp <[xp_points]>
+  - define level 0
+  - while <[xp].is_more_than_or_equal_to[0]>:
+      - define next_level <[level].add[1]>
+      - define xp_for_next <proc[xp_points_for_level].context[<[next_level]>]>
+      - if <[xp].is_less_than[<[xp_for_next]>]>:
+          - define xp_for_current <proc[xp_points_for_level].context[<[level]>]>
+          - define level_fraction <[xp].sub[<[xp_for_current]>].div[<[xp_for_next].sub[<[xp_for_current]>]>]>
+          - define result <[level].add[<[level_fraction]>]>
+          - determine <[result].mul[10].round.div[10]>
+      - define level <[next_level]>
+  - determine <[level]>
