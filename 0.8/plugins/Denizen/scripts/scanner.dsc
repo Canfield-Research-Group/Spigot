@@ -185,7 +185,7 @@ scanForItems:
                     - determine cancelled
                     - stop
 
-            # Allow GOLD items (theya re more magical) alter scan range without changing area cose
+            # Allow GOLD items (they are more magical) to alter scan range without changing area cost
             # and scale durability to act as if they are a different item
             - if <[is_golden]>:
                 - define scan_range <[scan_range].mul[<[golden_scan_range_multipler]>]>
@@ -714,6 +714,10 @@ ScannerTypes:
                     message: Spawners
                     targets:
                         - spawner
+                #torch:
+                #    message: Spawnable
+                #    targets:
+                #         - spawnable
 
         # Entitie based scans
         creatures:
