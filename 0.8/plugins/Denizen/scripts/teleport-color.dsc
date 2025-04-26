@@ -161,8 +161,15 @@ do_teleport:
         - define item <[map].get[<[key]>]>
         - define found_loc <[item].get[loc]>
 
+        - define chunk <[found_loc].chunk>
+        - if !<[chunk].is_loaded>:
+          - chunkload <[chunk]>
+          - wait 1t
+
+
         # Remove and skip teleporters that are broken (often from a deleted world or bug/development)
         - define world <[loc].world>
+
         # TIP: Checking for is_loaded is NOT always going to work since the world may never have been loaded
         # BUT MInecraft always loads base worlds and IF we force Phantomworld to auto load it's worlds
         # then is_loaded  will work. Otherwise things get a lot more complex with file checking and
@@ -170,16 +177,12 @@ do_teleport:
         # world files existing on disk.!!!
         - if !<server.worlds.contains[<[world]>]>:
             - define is_valid false
-        - else if !<[loc].material.name.ends_with[_carpet]>:
+        - else if !<[found_loc].material.name.ends_with[_carpet]>:
             - define is_valid false
         - else:
             - define is_valid true
 
         - if <[is_valid]>:
-          - define chunk <[found_loc].chunk>
-          - if !<[chunk].is_loaded>:
-            - chunkload <[chunk]>
-
           - define teleporter_current <[item].get[created]>
           # Track lowest for firtst
           - if <[first]> == null || <[teleporter_current]> < <[first].get[created]>:
