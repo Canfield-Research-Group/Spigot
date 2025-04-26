@@ -208,8 +208,8 @@ do_teleport:
     # Find next teleport target (with wraparound)
     - define next_loc <[found].get[loc]>
 
-    # Teleport and show effect
-    - teleport <[player]> <[next_loc].add[0,1,0]>
+    # Teleport and show effect - to center of block, at carpet height (1/16th of a block)
+    - teleport <[player]> <[next_loc].block.add[.5,.0625,.5]>
     - playeffect <[next_loc].add[0,1,0]> effect:ender_signal visibility:50
 
 

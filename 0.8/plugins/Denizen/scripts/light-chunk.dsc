@@ -79,6 +79,10 @@ mobcount:
   tab completions:
     1: [radius]
   script:
+    # Factor out special permissions to here so it can be disable for testing
+    - define is_admin <player.is_op>
+    - define is_admin false
+
     # XP of 103 points is around level6.57 and allows 2 scans at level 10
     #   Level 30 is 1,395 points allowing 13 scans for mobs
     #   The 90 XM is probably too low
@@ -103,14 +107,17 @@ mobcount:
         - define current <[mob_types].get[<[mob_name]>]||0>
         - define new_value <[current].add[1]>
         - define mob_types <[mob_types].with[<[mob_name]>].as[<[new_value]>]>
-    - foreach <[mob_types]> key:mob_name as:count :
-        - narrate "<yellow><[mob_name]><yellow> -- <red><[count]><red>"
+
+    # A bit OP for anyone to see list, so only OPS player (Add ths as a permisison later)
+    - if <[is_admin]>:
+        - foreach <[mob_types]> key:mob_name as:count :
+            - narrate "<yellow><[mob_name]><yellow> -- <red><[count]><red>"
     - if <[nearest_mob]> == null:
         - narrate "<red>No monstores found in range <[radius]> of player, , XP Cost: <[xp_cost_per_mob_query]>"
     - else:
         - narrate "<red>Monstors within <[radius]> of player: <[mobs].size>, XP Cost: <[xp_cost_per_mob_query]>"
         - define l <[nearest_mob].location>
-        - if false and <player.is_op>:
+        - if <[is_admin]>:
             # Allow ops to see exact location (cleaner)
             - define l <proc[location_noworld].context[<[l]>]>
             - narrate "<gold>Nearest mob <[nearest_mob].name> at distance <[nearest_distance]> at location <[l]>"
@@ -119,7 +126,8 @@ mobcount:
             - define near_x <[l].x.div[16].round_down.mul[16].add[8]>
             - define near_y <[l].y.div[16].round_down.mul[16].add[8]>
             - define near_z <[l].z.div[16].round_down.mul[16].add[8]>
-            - narrate "<gold>Nearest mob <[nearest_mob].name> at distance <[nearest_distance]> near (<[near_x]>, <[near_y]>, <[near_z]>)"
+            #- narrate "<gold>Nearest mob <[nearest_mob].name> at distance <[nearest_distance]> near (<[near_x]>, <[near_y]>, <[near_z]>)"
+            - narrate "<gold>Nearest mob is <[nearest_distance]> from player, near (<[near_x]>, <[near_y]>, <[near_z]>)"
 
     - experience take <[xp_cost_per_mob_query]> player:<player>
 

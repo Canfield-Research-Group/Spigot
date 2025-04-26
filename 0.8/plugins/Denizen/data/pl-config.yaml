@@ -1,0 +1,53 @@
+# Configuration file for Paradise Labs Denizen library
+# Best way to access this file is via the pl-config.dsc
+#   - Example: define xp_cost_per_torch <proc[pl__config].context[light-chunk.torch.xp_points]>
+
+light-chunk:
+  torch:
+      # How many XP for every torch placed: 10 was a bit high, as it ogten to 8 torches to fill a chunk
+      # which is almost level 6. Even t level 25 only afew chunks could be filled
+      xp_points: 5
+  mobcount:
+      # How many XP for every torch placed
+      xp_points: 90
+
+
+simple-inventory:
+  feeder:
+    # Feeder location data (trigger) is proccessed every x ticks where the x is calculated
+    # by a simple hash that when moded by tick_delay being zero the feeder is processed.
+    #   Use 0 to fire every tick, useful for debugging
+    #   10 for one stack per feeder per 0.5 seconds (the others seem WAY to fast for our game)
+    #    5 for one stack per feeder per 0.25 seconds
+    #   NOTE: If players game this by just doubling the feeders, we may need to deal wth that somehow.
+    #   But if reasonable complaints arrive we can just set tick delay per to 5
+    tick_delay: 10
+
+    # TODO:  maximum number of slots that can be moved per pass from each feeder
+    #max_slots: 1
+
+    # Maximum items that is allowed to be transfered per pass. Normally maximum slot size is 64
+    max_quantity: 64
+
+    # Minimum and maximum distance
+    #   Use 0 to disable, but there is still a safety to prevent recursion even on double chests
+    #   Use a minium of .5 to prevent a feeder placing items into self if also an inventory (no longer necessary)
+    #   Use a 1 to prevent macthing NSEWUP of container
+    #   Use 1 .5 to also prevent diaganols, which can help make the setup more consistent. From a human perspective 1 block shoudl includ diagnols
+    min_distance: 0
+
+    # THis is a block radius as a cuboid. It should be around 2x the bed-shunk plugins range (5)
+    # so a chest on one end of a base can reach the other without goign across the world.
+    #   Radisu of 5 chunks menas a base that can be 11 chunks by 11 chunks. Each chunk is 16 so 176
+    #   blocks. And that is a radius. So feeders operate in a  radius 10 meaning 11x11 (which is the entire chunk vertically. I might need to fix that)
+    max_distance: 176
+
+    # Maximum runtime before issuing a wait (there is 50ms oer tick) expressed in ms
+    max_runtime: 15
+    # How long to wait after reaching max_runtime
+    wait_time: 1t
+
+    # list order. Users will need to force this into a list:
+    #       ....get[list_order].as[list]
+    # Feeders should NOT be in tis list, those are handled seperately
+    list_order: item|wildcard|overflow_item|overflow_wildcard|overflow_fallback|unknown
