@@ -249,3 +249,45 @@ narrate_list:
             - narrate "<[use_color]><[line]>" targets:<[target_player]>
 
 
+
+
+
+# === Get current points for a player (round down)
+xp_points_of_player:
+  type: procedure
+  debug: false
+  definitions: player
+  script:
+    # Level to lowest integer (floor)
+    - define level <[player].xp_level>
+    # Get amount of XP the player has to the next level
+    - define progress <[player].xp>
+    # Number of XP required to reach next level
+    - define to_next <[player].xp_to_next_level>
+    # Convert level to XP
+    - define base_xp <proc[xp_points_for_level].context[<[level].round_down>]>
+
+    - define extra_xp <[progress].div[100].mul[<[to_next]>]>
+    - define total_xp <[base_xp].add[<[extra_xp]>]>
+    - determine <[total_xp].round_down>
+
+
+
+# === Get points for a specific level. This forces whole number levels only (round down)
+# Best used to identify how many points a cost of 5 levels means without regard to current players level.
+xp_points_for_level:
+  type: procedure
+  debug: false
+  definitions: level
+  script:
+    - define level <[level].round_down>
+    - if <[level].is_less_than_or_equal_to[16]>:
+      - define base_xp <[level].mul[<[level]>].add[<[level].mul[6]>]>
+    - else :
+      - if <[level].is_less_than_or_equal_to[31]>:
+          - define base_xp <[level].mul[2.5].mul[<[level]>].sub[<[level].mul[40.5]>].add[360]>
+      - else:
+        - define base_xp <[level].mul[4.5].mul[<[level]>].sub[<[level].mul[162.5]>].add[2220]>
+
+    # Not all callers can handle fractional amounts (points)
+    - determine <[base_xp].round>
