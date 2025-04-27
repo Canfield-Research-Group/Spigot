@@ -3,6 +3,10 @@
 #
 # See: pl-recipies.dcs for code that uses `pl_auto_discover: true` and auto unlocks player and player clients
 
+
+# == TIP: LEAVE goup blank, otherwise recpies will appear in the recipe book under the same space with
+# == each reciping scrolling to the next (like wool colors)
+
 # == Help: https://meta.denizenscript.com/Docs/Search/recipe%20id#item%20script%20containers
 
 # - Elytra
@@ -16,7 +20,6 @@ er__elytra:
         1:
             type: shaped
             recipe_id: er__elytra
-            group: misc
             # empty spots use air (|air|) without spaces
             input:
             - feather|phantom_membrane|feather
@@ -35,7 +38,6 @@ er__quartz:
         1:
             type: shapeless
             recipe_id: er__quartz
-            group: misc
             output_quantity: 4
             # Must be on ONE line, if multiple use '|' (liek a list)
             input: quartz_block
