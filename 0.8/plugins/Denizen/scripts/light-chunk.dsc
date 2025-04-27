@@ -51,15 +51,17 @@ torch_placer:
     - define by_distance <[by_distance].sort_by_number[1]>
 
     # Find first valid (based on light) nearest player
+    #  Uses a blacklist and update as needed.
+    - define non_placeable *_leaves
     - foreach <[by_distance]> as:entry :
         - define loc <[entry].get[2]>
-        - if <[loc].light.blocks> < 8 :
+        - if <[loc].light.blocks> < 8  and <[loc].below.material.name.advanced_matches[<[non_placeable]>].not>:
             - modifyblock <[loc]> torch
             - take item:torch from:<[player].inventory>
             - experience take <[xp_cost_per_torch]> player:<[player]>
             #- define elapsed <util.current_time_millis.sub[<[start]>]>
             #- narrate "<green>Torch placed at <[loc]> using <[xp_cost_per_torch]> XP (<[elapsed]>)."
-            - narrate "<green>Torch placed at <[loc]> using <[xp_cost_per_torch]> XP."
+            - narrate "<green>Torch placed using <[xp_cost_per_torch]> XP."
             - stop
 
     #- define elapsed <util.current_time_millis.sub[<[start]>]>
@@ -113,9 +115,9 @@ mobcount:
         - foreach <[mob_types]> key:mob_name as:count :
             - narrate "<yellow><[mob_name]><yellow> -- <red><[count]><red>"
     - if <[nearest_mob]> == null:
-        - narrate "<red>No monstores found in range <[radius]> of player, , XP Cost: <[xp_cost_per_mob_query]>"
+        - narrate "<red>No<gold> monstores found in range <[radius]> of player, (XP Cost: <[xp_cost_per_mob_query]>)"
     - else:
-        - narrate "<red>Monstors within <[radius]> of player: <[mobs].size>, XP Cost: <[xp_cost_per_mob_query]>"
+        - narrate "<red><[mobs].size><gold> monstors within <[radius]> of player. (XP Cost: <[xp_cost_per_mob_query]>)"
         - define l <[nearest_mob].location>
         - if <[is_admin]>:
             # Allow ops to see exact location (cleaner)
