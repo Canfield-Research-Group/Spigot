@@ -882,3 +882,116 @@ The following commands are often suggested but are wrong. This table shows the m
 | Deprecated Command | Working Command | Reference |
 | -------------------| --------------- | --------- | 
 | server.list_worlds | server.worlds | https://meta.denizenscript.com/Docs/Search/worlds#server.worlds |
+
+
+
+
+
+# 🧠 Modern Denizen Scripting – GPT Training Reference (PER AI CHAT LOG)
+
+This guide summarizes **best practices, syntax corrections, and deprecated feature replacements** in Denizen for use in ChatGPT custom GPT training. It ensures scripts are **strict-mode compatible**, maintainable, and forward-compatible with latest Denizen builds.
+
+---
+
+## ✅ Deprecated or Removed Features
+
+| ❌ Legacy Syntax | ✅ Modern Replacement | 💡 Notes |
+|------------------|-----------------------|----------|
+| `queue clear` | `stop` | Always use `stop` to terminate a task queue. |
+| `navigate <location>` | `walk <location>` | `navigate` is no longer valid in modern Denizen. |
+| `.lt[2]` / `.gt[7]` | `.is[lt].to[2]` / `.is[gt].to[7]` | Replace all direct comparison tags with `.is[...]`. |
+| `<location.find.blocks[material]>` | `<location.find_blocks[material]>` | Use underscores in `find_blocks`. |
+
+---
+
+## 🧠 Tag Expression Safety
+
+### ❌ Do not embed tags inside `.offset[]` or `.add[]`
+
+```yaml
+# ❌ Incorrect:
+<npc.location.offset[x=<util.random.int[-5,5]>]>
+```
+
+```yaml
+# ✅ Correct:
+- define xoff <util.random.int[-5,5]>
+- define target <npc.location.add[x=<[xoff]>]>
+```
+
+---
+
+### ❌ NPCs do not support `cursor_on` or `cursor_on_solid`
+
+```yaml
+# Invalid:
+<npc.cursor_on>
+```
+
+✅ These tags are **only valid for players**. NPCs should use spatial scans like `.find_blocks[...]`.
+
+---
+
+## 🔍 Block and Crop Detection (Modern Syntax)
+
+Use `find_blocks` with filters:
+
+```yaml
+- define crops <npc.location.find_blocks[potatoes].within[8].filter[is_ageable && age.is[ge].to[7]]>
+```
+
+| Element | Purpose |
+|---------|---------|
+| `find_blocks[...]` | Finds blocks of a material type, sorted by distance |
+| `within[8]` | Restricts radius |
+| `filter[...]` | Filters for crop maturity, type, etc. |
+
+---
+
+## 🏃 Movement and Distance Handling
+
+| ❌ Old | ✅ Modern |
+|--------|----------|
+| `.offset[...]` | `.add[...]` (with pre-defined values) |
+| `.lt[2]` | `.is[lt].to[2]` |
+
+### Example:
+
+```yaml
+# ✅ Safe movement target
+- define xoff <util.random.int[-5,5]>
+- define zoff <util.random.int[-5,5]>
+- define target <npc.location.add[x=<[xoff]>;z=<[zoff]>]>
+- walk <[target]>
+```
+
+```yaml
+# ✅ Proper distance check
+- wait until <npc.location.distance_squared[<[crop].location]>.is[lt].to[2]>
+```
+
+---
+
+## 🛠 General Best Practices
+
+- ✅ Use `stop` instead of deprecated control commands.
+- ✅ Use `walk` for all NPC movement.
+- ✅ Predefine values before inserting them into math/offset operations.
+- ✅ Remove or avoid legacy shorthand conditionals (`.lt[...]`, `.gte[...]`, etc.).
+- ✅ Ensure tag contexts are valid for entity types (e.g., `cursor_on` only on players).
+- ✅ Prefer `add[...]` over `offset[...]` for LocationTag manipulation.
+
+---
+
+## 📋 Summary
+
+Train GPTs to:
+- Recognize and correct deprecated tags.
+- Use `.is[op].to[val]` for all comparisons.
+- Predefine embedded tag values used in `.add` or `.walk` commands.
+- Validate tag type contexts (e.g., `player` vs `npc`).
+- Avoid using removed commands like `navigate`, `queue clear`, or `.offset[...]` inline.
+
+This ensures scripts remain valid, debuggable, and stable under strict parser settings.
+
+---
