@@ -42,12 +42,12 @@ fxp_commands:
   name: xptotal
   description: Shows your detailed experience info
   usage: /xptotal
-  permission: xptotal.use
+  #permission: false
   script:
     - narrate "<gold>Player XP Details"
     - define player_level <player.xp_level>
     - narrate "XP Level: <[player_level]>"
-    - define calculated <proc[xp_points_for_player].context[<player>]>
+    - define calculated <proc[xp_points_of_player].context[<player>]>
     - narrate "XP Points: <[calculated]>"
     - narrate "Progress to next level: <player.xp>%"
     - narrate "XP to next level: <player.xp_to_next_level>"
@@ -122,7 +122,7 @@ fxp_point_anvil:
           # - Use a timer long enough for a player to even do modest AFK, but still allow for auto cleanup
           # - If a plyer foes AFK for longer than this, then click exactly on the result they will get charge the FULL amoumt, tough luck, sorry.
           - flag <player> fxp.anvil_prior_level:<player.xp_level> duration:10m
-          - flag <player> fxp.anvil_prior_xp:<proc[xp_points_for_player].context[<player>]> duration:10m
+          - flag <player> fxp.anvil_prior_xp:<proc[xp_points_of_player].context[<player>]> duration:10m
 
       #- debug log "<red>SAVED XP: <player.flag[fxp.anvil_prior_xp]||0>"
 
@@ -149,7 +149,7 @@ fxp_adjust_player:
 
       # Calculate the level change and the diffreence in XP. Handle ADD/SUB in case a mod does that
       - define minecraft_player_level <player.xp_level>
-      - define minecraft_player_xp <proc[xp_points_for_player].context[<player>]>
+      - define minecraft_player_xp <proc[xp_points_of_player].context[<player>]>
       - define level_change <[player_prior_level].sub[<[minecraft_player_level]>]>
       #- debug log "<green>Player Prior: <[player_prior_level]> -- After: <[minecraft_player_level]> -- Change: <[level_change]>"
 
@@ -182,7 +182,7 @@ fxp_adjust_player:
       #- debug log "<green>Fair XP savings: <[savings_xp]> points, <[savings_level]> level(s)"
       - narrate "<green>Fair XP savings: <[savings_xp]> points, <[savings_level]> level(s)"
 
-      # **** 
+      # ****
       # Clear cost flag
       - flag <[player]> fxp.anvil_prior_xp:!
       - flag <[player]> fxp.anvil_prior_level:!

@@ -1064,14 +1064,14 @@ si__process_feeders:
             - define feeder_bounds <proc[create_cuboid_from_location].context[<[feeder_chest]>|<[feeder_range]>]>
 
             # Loop on each item in feeder until SOMETHING can be moved
-            - define feeder_slots <[feeder_inventory].map_slots.values>
+            - define feeder_slots <[feeder_inventory].map_slots>
 
             # Scan feeder chest until a move is found, quickly skipping items already identied as haveing no available target
             - define feeder_skip_next_time <list[]>
-            - foreach <[feeder_slots]> as:feeder_item :
+            - foreach <[feeder_slots]> as:feeder_item key:feeder_slot :
                 # THis seems like a good time to wait,  after all init AND before moves start. This loop
                 - define process_runtime <util.current_time_millis.sub[<[start_time]>]>
-                - if <[process_runtime]> > <[max_runtime]> :
+                - if <[process_runtime]> > <[max_runtime]>:
                     - debug log "<red>Script runtime exceed: <[process_runtime]> EXCEEDS <[max_runtime]>"
                     - wait <[wait_time]>
                     - define start_time <util.current_time_millis>
@@ -1267,7 +1267,13 @@ si__process_feeders:
                         #   WARNING: use the original feeder_item NOT the name (which looses NBT data)
                         #       Taking the item cannot be an ITEM, it might need to be a SLOT but let's see if the
                         #       name works, but we need to store the actual ITEM
-                        - take item:<[feeder_item_name]> quantity:<[items_to_move]> from:<[feeder_chest].inventory>
+                        - take item:<[feeder_item]> quantity:<[items_to_move]> from:<[feeder_chest].inventory>
+                        - if <[feeder_item_quantity].sub[<[items_to_move]>]> == 0 :
+                            # Get rid of ghost Items, Denizen will create ghost items when removing takeing 1 item to 0
+                            #   TO be safe we just detect any case where we empty the slot
+                            #   NOTE: For this command origin is an ITEM not an inventory (the SWAP woudl be an origin).
+                            #   Yes that is very inconsitent  and rather horrid, welcome to Minecraft coding
+                            - inventory set destination:<[feeder_chest].inventory> slot:<[feeder_slot]> origin:air
                         - give item:<[feeder_item]> quantity:<[items_to_move]> to:<[target_chest].inventory>
                         - define counter <[counter].add[1]>
                         # This is used to allow a more intelligent loop exit logig that can leave multiple levels base don logic
@@ -1291,7 +1297,7 @@ si__help:
   name: simple-inventory
   description: List or reset simple inventory feeders
   usage: /simple-inventory [player] [list/clear/rebuild/enable/disable/diag] [rebuild-radius-chunks]
-  permission: true
+  #permission: false
   debug: false
   tab completions:
     # This will complete any online player name for the second argument
@@ -1302,7 +1308,7 @@ si__help:
     3: [radius]
   script:
       # Definitions
-    - define owner <context.args.get[1]>
+    - define owner <context.args.get[1]||null>
     - define command <context.args.get[2]||help>
     - define radius <context.args.get[3]||5>
 

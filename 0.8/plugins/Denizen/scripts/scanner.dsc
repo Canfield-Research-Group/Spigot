@@ -386,7 +386,7 @@ scanner_command:
   name: scanner
   description: Scanner help
   usage: /scanner help [page]
-  #permission: scanner.use
+  #permission: false
   script:
     - if <context.args.is_empty>:
         - define command help
@@ -436,6 +436,8 @@ scannerCommandHelp:
     debug: false
     name: scanner_command_help
     description: Scanner help
+    # permission is FALSE it is UNRELIABLE, if true permission is ON, COMMENT to disable
+    #permission: false
     definitions: page
 
     script:

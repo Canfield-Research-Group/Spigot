@@ -300,7 +300,7 @@ xp_level_from_points:
   debug: false
   definitions: xp_points
   script:
-  - define xp <[xp_points]>
+  - define xp <[xp_points]||0>
   - define level 0
   - while <[xp].is_more_than_or_equal_to[0]>:
       - define next_level <[level].add[1]>

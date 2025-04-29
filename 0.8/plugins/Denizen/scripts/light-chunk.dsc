@@ -39,7 +39,6 @@ torch_placer:
     - define aligned_loc_lower <location[<[aligned_x]>,<[aligned_y]>,<[aligned_z]>,<[base_loc].world>]>
     - define aligned_loc_upper <[aligned_loc_lower].add[15,15,15]>
     - define scan_area <[aligned_loc_lower].to_cuboid[<[aligned_loc_upper]>]>
-    # TODO: If we used the location find spawnable that would be faster as it sorts for use BUT it uses the player center and for game play this uses chunk boundry
     - define spawnable_blocks <[scan_area].spawnable_blocks>
 
     # Sort by distance using an easy sort, but will tend to calculate distance 3x per location
@@ -55,7 +54,9 @@ torch_placer:
     - define non_placeable *_leaves
     - foreach <[by_distance]> as:entry :
         - define loc <[entry].get[2]>
-        - if <[loc].light.blocks> < 8  and <[loc].below.material.name.advanced_matches[<[non_placeable]>].not>:
+        # Light level after Minecraft 1.18 is now 0 for overworld and 11 of nether (we ignore nether here)
+        #   Prior it was light level 7 or less was spawnable.
+        - if <[loc].light.blocks> < 1  and <[loc].below.material.name.advanced_matches[<[non_placeable]>].not>:
             - modifyblock <[loc]> torch
             - take item:torch from:<[player].inventory>
             - experience take <[xp_cost_per_torch]> player:<[player]>
@@ -77,7 +78,7 @@ mobcount:
   name: mobcount
   description: EXPERIMETNAL Count mobs around player
   usage: /mobcount [radius]
-  permission: true
+  #permission: false
   tab completions:
     1: [radius]
   script:
@@ -139,7 +140,7 @@ lc__help:
   name: light-chunk
   description: Mobs and Light control
   usage: /light-chunk [help]
-  permission: true
+  #permission: false
   debug: false
   tab completions:
     1: help
@@ -148,9 +149,9 @@ lc__help:
     #   none
 
     - define show_help true
-    - define xp_cost_per_torch  <script[lc__config].data_key[data].get[torch].get[xp_points]>
+    - define xp_cost_per_torch <proc[pl__config].context[light-chunk.torch.xp_points]>
     - define xp_level_torch <proc[xp_level_from_points].context[<[xp_cost_per_torch]>]>
-    - define xp_cost_per_mob_query  <script[lc__config].data_key[data].get[mobcount].get[xp_points]>
+    - define xp_cost_per_mob_query  <proc[pl__config].context[light-chunk.mobcount.xp_points]>
     - define xp_level_mob_query <proc[xp_level_from_points].context[<[xp_cost_per_mob_query]>]>
 
     - if <[show_help]>:
