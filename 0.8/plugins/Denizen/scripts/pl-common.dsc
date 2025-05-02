@@ -312,3 +312,23 @@ xp_level_from_points:
           - determine <[result].mul[10].round.div[10]>
       - define level <[next_level]>
   - determine <[level]>
+
+
+# === process a queue name and return a normalized return result
+queue_parse:
+  type: procedure
+  debug: false
+  definitions: queue_data
+  script:
+    - define result <map[cancelled=false]>
+    - foreach <[queue_data]> as:command :
+      - if <[command]> == cancelled:
+        - define result <[result].with[cancelled].as[true]>
+      - else:
+        # if there is no delimiter return the entire string
+        - define key <[command].before[:]>
+        # if there is no delimiter return a blank
+        - define value <[command].after[:]>
+        - define result <[result].with[<[key]>].as[<[value]>]>
+
+    - determine <[result]>
