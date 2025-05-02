@@ -107,30 +107,12 @@ farmer_ai_controller:
 
 
     - define queue_id farmer_ai_task<npc.id>
-    #- if <server.queues.filter[id.is[==].to[<[queue_id]>]]>.is_empty>:
-    - define queues <util.queues>
-    #- debug log "<green>Queues: <[queues]>"
-    #- foreach <[queues]> as:q :
-    #  - debug log "<yellow>Calc ID: <[queue_id]>"
-    #  - debug log "<yellow>ID: <[q].id>"
-    #- debug log "<gold>RUNING"
-    #
-    - ~run farmer_ai_task id:<[queue_id]> save:farm_ai_controller
-
-    # SEE: Queues : https://meta.denizenscript.com/Docs/Search/queuetag[]
-    # - Parse determine results, not there may a cancel command present, we just ignore anything we do not
-    # - care about.
-    - define queue <entry[farm_ai_controller].created_queue.determination||list[]>
-    - define delay <[wait_time]>
-    - foreach <[queue]> as:command :
-      - define option <[command].before[:]>
-      - define value <[command].after[:]>
-      - if <[option]> == delay:
-        - debug log "<red>Returned delay time: <[value]>"
-        - define delay <[value]>
-
+    - define sid myscript_<util.current_tick>
+    - ~run farmer_ai_task id:<[queue_id]> save:<[sid]>
+    - define results <proc[queue_parse].context[<entry[<[sid]>].created_queue.determination||list[]>]>
+    - define delay <[results].get[delay]||<[wait_time]>>
+    # Recycle to keep brain controler alive
     - run farmer_ai_controller id:farmer_ai_controller<npc.id> delay:<[delay]>
-    - stop
 
 
 farmer_ai_task:
@@ -149,7 +131,6 @@ farmer_ai_task:
     # - Simulate LEASH
     - if <npc.has_flag[leashed]>:
       # Force a re-evaluation of the farm
-      - debug log "<green><npc.name>  is Following"
       - flag npc base_loc:null
       - ~run leash_follow_task
       # This task runs much quicker so NPC keeps up
@@ -237,6 +218,7 @@ farmer_ai_task:
         - take item:<[item]> from:<npc.inventory>
 
       # Transfer hoe from ground to the NPC
+      - animate <npc> animation:SWING_MAIN_HAND
       - equip <npc> hand:<[hoe_item]>
       - remove <[hoe]>
       - ~run message_scrolling_status def:thank_you
@@ -245,7 +227,6 @@ farmer_ai_task:
     # - Check for NPC inventory needing emptying
     # Check if farmer needs to add to the chest, and if full add animation
     - if <npc.inventory.quantity_item> > 32:
-        - debug log "<red>INV full, unloading"
         - ~run farmer_deliver_task
         # If after transfering items the farm still does not have an empty slow then we assume they are full
         # and the chest is full. Since tasks do NOT return (easily) a value this seems the fastest way
@@ -263,53 +244,74 @@ farmer_ai_task:
       - ~run message_scrolling_status def:need_item
       - stop
 
+
     # - Process Harvesting
     - define harvested false
     - ~run message_scrolling_status def:farming
     - if <npc.inventory.contains_item[*_hoe]>:
-      # Check inventory
-      - define crop_list <[farm_area].blocks[<[valid_crops]>]>
 
       # TIP: We cannot easily prefilter since different crops have different maximum mages, so we scan it ...
       # .within[<[search_radius]>].filter_tag[<[filter_value].material.age.is[or_more].than[<[crop_max_age]>]>]>
+      - define crop_list <[farm_area].blocks[<[valid_crops]>]>
       - if <[crop_list].size>:
           # Randomize list to be a bit more fun an alive
           - define crop_list <[crop_list].random[<[crop_list].size>]>
           - foreach <[crop_list]> as:crop :
-            #- debug log "<red>NPC Sees GROWN crops <[crop].material.name> -- <[crop].material.age> -- <[crop].material.maximum_age> -- <[crop]>"
             - if <[crop].material.age.is[or_more].than[<[crop].material.maximum_age>]>:
-              #- debug log "<red>Crop: <[crop]> -- <[farm_area]>"
-              - ~walk <npc> <[crop]> speed:1 auto_range
-              # using distance sqared means we need to 2x the allowed distance, so within 2 means gt 4
-              - if <npc.location.distance_squared[<[crop]>].is[more].to[4]>:
-                - adjust <npc> "name:<red>I am Stuck!"
-                - define effect_loc <npc.location.add[.5,.25,.5]>
-                - playeffect <[effect_loc]> effect:angry_villager quantity:3 offset:0.1,0.1,0.1 visibility:10
+              # This complex mantra call as task, waits for it to finish and then sees if it was cancled (errored)
+              - define sid myscript_<util.current_tick>
+              - ~run walk_to_location def:<[crop]> save:<[sid]>
+              - define results <proc[queue_parse].context[<entry[<[sid]>].created_queue.determination||list[]>]>
+              - if <[results].get[cancelled]||false>:
+                  # Fall into random walk and try again
+                  - foreach stop
 
-              #- debug log "<yellow>Breaking <[crop]>"
+              # using distance sqared means we need to 2x the allowed distance, so within 2 means gt 4
+              - if <npc.location.distance_squared[<[crop]>].is[more].to[6]>:
+                - debug log "<red>STUCK ME AM - IGNORED"
+                # Fall into a random walk to see if that helps, combined with random harvest it might get NPC unstuck
+                # but in case 
+                - foreach stop
+                # LET IT RUN ANYWAY -- I am getting board of working around pathing and the logic to fix this is not worth it for a farm
+              #  - ~run message_scrolling_status def:navigate_failed
+              #  - stop
+
+              # Get prior crop and inherit direction/facing if it exists (like cocoa)
+              # = NONE OF THIS WORKS for Cocoa (if matrial is used carrots are planted fully grown)
               - define prior_crop <[crop].material.name>
-              - break <[crop]> <npc>
+              - define direction <[crop].material.direction||null>
+              - debug log "<green>Crop to plant: : <[prior_crop]> -- <[direction]>"
+
+              - animate <npc> animation:SWING_MAIN_HAND
+              # WAIT for the break to finish, otherwis it can harvest the placed item (even with 3t) delay
+              # this was seen with cocoa
+              - ~break <[crop]> <npc>
               # Need to wait a tick for item to pop into the world reliably, but for athetics we wait a bit longer
-              - wait 10t
+              - wait 3t
               # In theory this could pick up a hoe (or anything) but that's fine since we look in inventory
               # for any NPC items instead o using flags.
               - define nearby_items <npc.location.find_entities[item].within[3]>
-              #- debug log "<red>Drops: <[nearby_items]>"
               - foreach <[nearby_items]> as:item:
-                #- debug log "<gold>Gave NPC <[item]>"
+                - debug log "<gold>Drops: <[item]>"
                 - give item:<[item].item> to:<npc.inventory>
                 - remove <[item]>
+
               # Plant with what was originally there
-              #- debug log "<gold>Replant <[prior_crop]>"
               # TODO: Currenlty this does not cost a seed/item to avoid a matrix table of what plants are needed for what.
               #  - I will probably leave this as a bonus since you cannot get enchanted elements and it avoids all kinds
               #  - of inventory reserves and that matrix table I am too lazy to build and maintain
               #       - Remember, the farmer will n REPLANT, they will never plant from scratch.
-              - modifyblock <[crop]> <[prior_crop]>
+
+              - if <[direction]>:
+                # No Pyhics is needed during placement , otherwise for coca, vines and other attached blocks the MC engine
+                # phtics (block update) can cause th eitem to break. This must be done as well as the waiting break (~break) if using break
+                - modifyblock <[crop]> <[prior_crop]>[direction=<[direction]>]  no_physics
+              - else:
+                - modifyblock <[crop]> <[prior_crop]>
+
               - define harvested true
               # Only one harvested block per AI run
               - foreach stop
-
 
     - if <[harvested].not>:
         # Wander a bit between harvesting
@@ -327,6 +329,8 @@ farmer_deliver_task:
   type: task
   debug: false
   script:
+    - ~run message_scrolling_status def:unloading
+
     - define chest_loc <npc.flag[chest_loc]||null>
     - define look_target <[chest_loc].add[0,0,0]>
     - look <npc> <[look_target]>
@@ -357,9 +361,12 @@ farmer_deliver_task:
 farmer_wander_task:
   type: task
   debug: false
+  definitions: force_walk
   script:
     - define farm_area <npc.flag[farm_area]>
     - define wander_loc <[farm_area].random>
+
+    - define force_walk <[force_walk]||false>
 
     # BUG: IN Denizen if lootat and target are the same the NPC ZOOMS to the target, even when walk speed is 0.5
     # Apparently this is a citizen's thing?????
@@ -367,7 +374,9 @@ farmer_wander_task:
     - define look_target <[wander_loc].add[0,.5,0]>
     - look <npc> <[look_target]>
     # To reduce loads only move 1/4 of the time
-    - if <util.random_chance[15]>:
+    #   In any case do NOT check for sucess on walking, it is not worth it and could result in very long delays
+    #   Caller uses to to just look busy OR to help get unstuck, and will just try again if needed
+    - if <[force_walk]> or <util.random_chance[15]>:
       - walk <npc> <[wander_loc]> speed:1 auto_range
 
 
@@ -442,11 +451,24 @@ leash_follow_task:
     - flag npc leashed:!
     - stop
 
-  - if <util.current_tick.mod[5]> == 0:
-    - playeffect <npc.location.add[0,1,0]> effect:heart quantity:3 visibility:10 offset:0.1,0.1,0.1
+  - run message_scrolling_status def:following
 
   - if <npc.location.distance[<[leash_holder].location>].is[or_more].to[2]>:
     - walk <npc> <[leash_holder].location> auto_range speed:1
+
+
+
+# - NPC walk to location and handle navigation failure
+walk_to_location:
+  type: task
+  debug: false
+  definitions: location
+  script:
+    - ~walk <npc> <[location]> speed:1 auto_range
+    # using distance sqared means we need to 2x the allowed distance, so within 2 means gt 4
+    - if <npc.location.distance_squared[<[location]>].is[more].to[4]>:
+      - ~run message_scrolling_status def:navigate_failed
+      - determine cancelled
 
 
 # - NPC scrolling message. Will displaye each message over the NPC head (name area) and move to next
