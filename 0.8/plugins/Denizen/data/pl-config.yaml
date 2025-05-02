@@ -51,3 +51,50 @@ simple-inventory:
     #       ....get[list_order].as[list]
     # Feeders should NOT be in tis list, those are handled seperately
     list_order: item|wildcard|overflow_item|overflow_wildcard|overflow_fallback|unknown
+
+farmer:
+    # How long to wait between each iteration, too quik and farmer is spastic and LAGS, 1-5s is good. An be expresse din ticks as well (20t)
+    wait_time: 2s
+    # How many blocks to search around Farmer (radius) for a valid copomster/chest, nearest wins
+    max_home_search: 16
+    # Valid chests
+    valid_chests: barrel|chest|trapped_chest|*_shulker_box
+    # Valid crops the farm will harvest
+    valid_crops: carrots|potatoes|wheat|beatroots|nether_wart
+    # Maximum radius of Farm
+    farm_radius_max: 32
+    # Scroll sped of name tag messages, espessed in ticks
+    message_scroll_speed: 20
+    # Message for Farming, use '|' to seperate
+    status:
+      farming:
+        messages:
+          - <yellow>Farming ...
+        emotion: none
+
+      need_item:
+        messages:
+          - <yellow>Please drop me a hoe
+        emotion: confused
+
+      farm_to_small:
+        messages:
+          - <yellow>Planted area (<[farm_size]>) is too small (min 9)
+          - <yellow>Break composter, replant, replace composter
+        emotion: angry
+
+      farm_broken:
+        messages:
+          - <red>Farm seems broken/incomplete
+          - <red>Plant Area, Add composter, place chest on top
+        emotion: angry
+
+      thank_you:
+        messgaes:
+          - <yellow>Thank you!
+        emotion: gratitude
+
+      invalid_item:
+        messages:
+          - <yellow>I can't use enchanted items
+        emotion: confused
