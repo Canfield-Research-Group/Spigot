@@ -21,6 +21,7 @@
 # TODO:
 #   - detect a villager touching beocming a farmer and if composter has a frame with a hoe remove and change to NPC Farmer
 #     - See if we can keep villagers clothing
+#     - See conmfig file farmer for proposed block pattern
 #   - range : scan for a plantable block types (a whitelist) around composter
 #           - NSEW
 #           - Upon finding first non plantable NON water STOP
@@ -47,7 +48,7 @@ farmer_teleport_reset:
         - debug log  "<gold>Assignments: <[assignments]>"
         - if <[assignments].contains[farmer_brain]>:
           - debug log "<red>Farmer teleported, resetting farm location."
-          - flag npc farmer_home:<context.entity.location>
+          - flag <npc> farmer_home:<context.entity.location>
 
 
 farmer_brain:
@@ -56,13 +57,15 @@ farmer_brain:
   actions:
     # Use this to structure to make sure the NPCs resume on server start
     on spawn:
-      - flag npc farmer_home:<npc.location>
+      - flag <npc> farmer_home:<npc.location>
       - run farmer_ai_task delay:5s
 
     on assignment:
-      - flag npc farmer_spawn:<npc.location>
-      # Trigger reset
-      - flag npc base_loc:null
+      - flag <npc> farmer_spawn:<npc.location>
+      # Force farm to be re-scaned
+      - flag <npc> base_loc:null
+      # Set path finding to be within 2 (default is 1)
+      - adjust <npc> path_distance_margin:2
 
       - trigger name:click state:true
       - trigger name:proximity state:true
@@ -72,10 +75,10 @@ farmer_brain:
       # Tell all controllers or other NPC scripts to NOT recucle or to exit if in long loops
       #  Wait a second or two for the other tasks to stop, then clear flag and spin up again
       # - Change this to a monitor for queus runing with controller name, which is complicated
-      - flag npc reset:true
+      - flag <npc> reset:true
       - wait 5s
-      - flag npc reset:!
-
+      - flag <npc> reset:!
+      - debug log "<red>ASSIGNMENT"
       - run farmer_ai_controller
 
 
@@ -84,10 +87,10 @@ farmer_brain:
           - stop
       - if <npc.has_flag[leashed]>:
           - narrate "<green><npc.name> released!"
-          - flag npc leashed:!
+          - flag <npc> leashed:!
           - stop
-      - flag npc leashed:<player>
-      - narrate "<yellow><npc.name> following"
+      - flag <npc> leashed:<player>
+      - ~run message_scrolling_status def:finishing_work
 
 
 
@@ -99,18 +102,14 @@ farmer_ai_controller:
     - if <npc.is_spawned.not>:
       - stop
 
-   # Used to close out any running controllers, usually called by assignment
-    - if <npc.has_flag[reset]>:
-      - stop
-
     - define wait_time  <proc[pl__config].context[farmer.wait_time]>
-
 
     - define queue_id farmer_ai_task<npc.id>
     - define sid myscript_<util.current_tick>
     - ~run farmer_ai_task id:<[queue_id]> save:<[sid]>
     - define results <proc[queue_parse].context[<entry[<[sid]>].created_queue.determination||list[]>]>
     - define delay <[results].get[delay]||<[wait_time]>>
+    #- debug log "<aqua><util.queues>"
     # Recycle to keep brain controler alive
     - run farmer_ai_controller id:farmer_ai_controller<npc.id> delay:<[delay]>
 
@@ -119,19 +118,21 @@ farmer_ai_task:
   type: task
   debug: false
   script:
+   # Used to close out any running controllers, usually called by assignment
+    - if <server.has_flag[helpers_reset]>:
+      - stop
 
     # How many blocks to search around Farmer (radius) for a valid copomster/chest, nearest wins
     - define max_home_search <proc[pl__config].context[farmer.max_home_search]>
     # Valid chests
-    - define valid_chests <proc[pl__config].context[farmer.valid_chests]>
+    - define valid_chests <proc[pl__config].context[farmer.valid_farm.chest]>
     # Valid crops the farm will harvest
-    - define valid_crops <proc[pl__config].context[farmer.valid_crops]>
-
+    - define valid_crops <proc[pl__config].context[farmer.crops].keys>
 
     # - Simulate LEASH
     - if <npc.has_flag[leashed]>:
       # Force a re-evaluation of the farm
-      - flag npc base_loc:null
+      - flag <npc> base_loc:null
       - ~run leash_follow_task
       # This task runs much quicker so NPC keeps up
       - determine delay:10t
@@ -143,49 +144,77 @@ farmer_ai_task:
     - define chest_loc <npc.flag[chest_loc]||null>
     - define farm_area <npc.flag[farm_area]||null>
 
+    # - IDENTIFY Farm Boundries
     # - Performance is not an issue here, since the script has extensive pauses
     # Identify if the farmer home has been identified
     - if <[base_loc]> == null or <[chest_loc]> == null or <[farm_area]> == null:
-      - debug log "<aqua>NULL"
       - define base_loc_tmp null
       - define chest_loc_tmp  null
       - define farm_area_tmp null
 
-      - define composters <npc.location.find_blocks[composter].within[<[max_home_search]>]>
-      - debug log "<aqua>CALC FARM: <[composters]>"
-      - if <[composters].size> > 0:
-        - define base_loc_tmp <[composters].get[1]>
-        # See if there is a chest on it
-        - define chest_loc_tmp <[base_loc_tmp].add[0,1,0]>
-        - if <[chest_loc_tmp].material.name.advanced_matches[<[valid_chests]>]>:
-          # Identify farm area, for performance we stick with a cuboid
-          # Scan NSEW to identify farm. Just get close enough, players can
-          # craft impossible farms, in which case they will not work very well.
-          - define farm_area <proc[farm_find_bounds_fast].context[<[base_loc_tmp]>]>
-          - define farm_size <[farm_area].volume>
-          - if <[farm_size]> < 9:
-            - ~run message_scrolling_status def:farm_to_small
-            - determine delay:4s
 
-          - define base_loc <[base_loc_tmp]>
-          - define chest_loc  <[chest_loc_tmp]>
-          - debug log "<gold> C: <[chest_loc]> -- B: <[base_loc]> -- F: <[farm_area]>"
+      # Get blocks that make up a valid farm. Note only NSEW from famr detection block are scanned to safe time
+      - define farm_detection_blocks <list[]>
+      - foreach <proc[pl__config].context[farmer.valid_farm.blocks]> as:b :
+        - if <[b]> == _crops_ :
+          - define farm_detection_blocks <[farm_detection_blocks].include[<[valid_crops]>]>
+        - else:
+          - define farm_detection_blocks:->:<[b]>
+      - define farm_detection_offset <proc[pl__config].context[farmer.valid_farm.y_offset]>
+
+      # Get blcoks that make up the dection matrix for this farm
+      - define trigger_block <proc[pl__config].context[farmer.valid_farm.trigger]>
+      - define found_triggers <npc.location.find_blocks[<[trigger_block]>].within[<[max_home_search]>]>
+      - if <[found_triggers].size> > 0:
+        - define base_loc_tmp <[found_triggers].get[1]>
+        # Make sure the item below the composter is correct, allow a water-like block first
+        - define block_below <[base_loc_tmp].below>
+        - if <[block_below].material.name> == water or <[block_below].material.waterlogged>:
+          - debug log "<red>Found water/logged: <[block_below]>"
+          - define block_below <[block_below].below>
+        - define base_substrate <proc[pl__config].context[farmer.valid_farm.substrate]>
+        - debug log "<red>Substrate?: <[block_below].material> -- <[base_substrate]>"
+        - if <[block_below].material.name.advanced_matches[<[base_substrate]>]>:
+          - debug log "<red>Found Substrate: <[base_substrate]>"
+          # See if there is a chest on it
+          - define chest_loc_tmp <[base_loc_tmp].add[0,1,0]>
+          - if <[chest_loc_tmp].material.name.advanced_matches[<[valid_chests]>]>:
+            - debug log "<red>Found Chest: <[chest_loc_tmp]>"
+            # Identify farm area, for performance we stick with a cuboid
+            # Scan NSEW to identify farm. Just get close enough, players can
+            # craft impossible farms, in which case they will not work very well.
+            - ~run message_scrolling_status def:farm_scan
+            - define farm_area <proc[farm_find_bounds_fast].context[<[base_loc_tmp]>]>
+
+            - define farm_size <[farm_area].volume>
+            - if <[farm_size]> < 9:
+              - ~run message_scrolling_status def:farm_to_small
+              - determine delay:4s
+
+            - define base_loc <[base_loc_tmp]>
+            - define chest_loc  <[chest_loc_tmp]>
+            - debug log "<gold> C: <[chest_loc]> -- B: <[base_loc]> -- F: <[farm_area]>"
+            - flag <npc> farm_scanned:<util.current_tick>
 
 
-      - flag npc base_loc:<[base_loc]>
-      - flag npc chest_loc:<[chest_loc]>
-      - flag npc farm_area:<[farm_area]>
+      - flag <npc> base_loc:<[base_loc]>
+      - flag <npc> chest_loc:<[chest_loc]>
+      - flag <npc> farm_area:<[farm_area]>
     - else:
       # If environment is NOT valid then clear elements
       - if <[base_loc].material.name> != composter or <[chest_loc].material.name.advanced_matches[<[valid_chests]>].not>:
         - define base_loc null
-        - flag npc base_loc:null
+        - flag <npc> base_loc:null
 
     # Catch all
     - if <[base_loc]>  == null:
       - ~run message_scrolling_status def:farm_broken
       - determine delay:4s
 
+      # Show outline of farm for a few seconds
+      - if <util.current_tick.sub[<npc.flag[farm_scanned]||0>]> < 200:
+        - debug log "<red>Play effect: <[farm_area].outline_2d[<npc.location.y.add[3]>]>"
+        - playeffect effect:angry_villager at:<[farm_area].outline_2d[<npc.location.y.add[3]>]> quantity:2  visibility:32 offset:0.4,0.1,0.4
 
     # - Set associated cuboids
     # Drop area is one below cuboid (items site on TOP of a block so you need to look at the block one below you expect to, or so it seems)
@@ -234,11 +263,11 @@ farmer_ai_task:
           # Set animation over chest location
           - define effect_loc <[chest_loc].add[.5,0,.5]>
           - playeffect <[effect_loc]> effect:angry_villager quantity:1 offset:0.25,0.5,0.25 visibility:10
-          - flag npc "log:Farmer inventory is full"
+          - flag <npc> "log:Farmer inventory is full"
           - stop
 
     # Clear log
-    - flag npc log:null
+    - flag <npc> log:null
 
     - if <npc.inventory.contains_item[*_hoe].not>:
       - ~run message_scrolling_status def:need_item
@@ -247,7 +276,10 @@ farmer_ai_task:
 
     # - Process Harvesting
     - define harvested false
-    - ~run message_scrolling_status def:farming
+    # Tracks if the NPC should be forced towalk during idle, useful to try and get unstuck from harvesting
+    - define force_walk false
+
+    - ~run message_scrolling_status def:working
     - if <npc.inventory.contains_item[*_hoe]>:
 
       # TIP: We cannot easily prefilter since different crops have different maximum mages, so we scan it ...
@@ -259,28 +291,19 @@ farmer_ai_task:
           - foreach <[crop_list]> as:crop :
             - if <[crop].material.age.is[or_more].than[<[crop].material.maximum_age>]>:
               # This complex mantra call as task, waits for it to finish and then sees if it was cancled (errored)
+              - define near_crop <proc[find_nearby_free_spot].context[<npc.location>|<[crop]>]>
+
               - define sid myscript_<util.current_tick>
+              # WARNING: THis method can CHANGE destination due to path blocked. So let it handle any anomolies
               - ~run walk_to_location def:<[crop]> save:<[sid]>
               - define results <proc[queue_parse].context[<entry[<[sid]>].created_queue.determination||list[]>]>
               - if <[results].get[cancelled]||false>:
-                  # Fall into random walk and try again
-                  - foreach stop
+                  # Continue scaning for another crop, maybe we can reach that
+                  - foreach next
 
-              # using distance sqared means we need to 2x the allowed distance, so within 2 means gt 4
-              - if <npc.location.distance_squared[<[crop]>].is[more].to[6]>:
-                - debug log "<red>STUCK ME AM - IGNORED"
-                # Fall into a random walk to see if that helps, combined with random harvest it might get NPC unstuck
-                # but in case 
-                - foreach stop
-                # LET IT RUN ANYWAY -- I am getting board of working around pathing and the logic to fix this is not worth it for a farm
-              #  - ~run message_scrolling_status def:navigate_failed
-              #  - stop
-
-              # Get prior crop and inherit direction/facing if it exists (like cocoa)
-              # = NONE OF THIS WORKS for Cocoa (if matrial is used carrots are planted fully grown)
+              # Check (indirectly) if crop is directional (ie; cocoa bans)
               - define prior_crop <[crop].material.name>
               - define direction <[crop].material.direction||null>
-              - debug log "<green>Crop to plant: : <[prior_crop]> -- <[direction]>"
 
               - animate <npc> animation:SWING_MAIN_HAND
               # WAIT for the break to finish, otherwis it can harvest the placed item (even with 3t) delay
@@ -292,7 +315,6 @@ farmer_ai_task:
               # for any NPC items instead o using flags.
               - define nearby_items <npc.location.find_entities[item].within[3]>
               - foreach <[nearby_items]> as:item:
-                - debug log "<gold>Drops: <[item]>"
                 - give item:<[item].item> to:<npc.inventory>
                 - remove <[item]>
 
@@ -364,8 +386,8 @@ farmer_wander_task:
   definitions: force_walk
   script:
     - define farm_area <npc.flag[farm_area]>
-    - define wander_loc <[farm_area].random>
 
+    - define wander_loc <[farm_area].random>
     - define force_walk <[force_walk]||false>
 
     # BUG: IN Denizen if lootat and target are the same the NPC ZOOMS to the target, even when walk speed is 0.5
@@ -377,7 +399,7 @@ farmer_wander_task:
     #   In any case do NOT check for sucess on walking, it is not worth it and could result in very long delays
     #   Caller uses to to just look busy OR to help get unstuck, and will just try again if needed
     - if <[force_walk]> or <util.random_chance[15]>:
-      - walk <npc> <[wander_loc]> speed:1 auto_range
+      - ~run walk_to_location def:<[wander_loc]>
 
 
 # - Give an origin identify boundries of a farm based on PLANTED crops
@@ -403,7 +425,8 @@ farm_find_bounds_fast:
     #- define c <[corner1].to_cuboid[<[corner2]>]>
     #- debug log "<red>Cuboid: <[c]>"
 
-    - determine <[corner1].to_cuboid[<[corner2]>]>
+    - define farm_area <[corner1].to_cuboid[<[corner2]>]>
+    - determine <[farm_area]>
 
 
 # - Scan a direction, specified by an relative cordinate (0,0,1) as delta
@@ -416,7 +439,7 @@ scan_direction:
     #- debug log "<green>FIND BOUNDS: <[origin]> ----- <[delta]>"
 
     # TODO: move to configuration
-    - define valid_crops <proc[pl__config].context[farmer.valid_crops]>
+    - define valid_crops <proc[pl__config].context[farmer.crops].keys>
     - define max_dist <proc[pl__config].context[farmer.farm_radius_max]>
 
     # Add composter, we ignore thse
@@ -446,9 +469,9 @@ leash_follow_task:
   debug: false
   script:
   - define leash_holder <npc.flag[leashed]||null>
-  - if <[leash_holder]> == null or <[leash_holder].is_online.not> or <[leash_holder].item_in_hand.material.name> != lead:
-    - narrate "<green><npc.name> Released, lead dropped or player off line."
-    - flag npc leashed:!
+  - if <[leash_holder]> == null or <[leash_holder].is_online.not> or <[leash_holder].item_in_hand.material.name> != lead or <player.is_sneaking>:
+    - narrate "<green>Following canceled"
+    - flag <npc> leashed:!
     - stop
 
   - run message_scrolling_status def:following
@@ -458,17 +481,83 @@ leash_follow_task:
 
 
 
-# - NPC walk to location and handle navigation failure
+# - NPC walk to location and handle navigation failure. After handling numerous MC relat
+# - Handles numerous MC realetd anomolies
+#   - If target is not reachable then find a reachables target nearby starting at radius 1 then 2
+#   - If the current NPC y is not an int then teleport slightly upward.
+#     - A hack to work around MC somtimes placing y below the block, enough to fail some path finding targets
+#     - After implementing this pathing was dramatically improved, Y offises of .9374 were quite common
+#   - Checks if taget was reached within 2 or so, issues a cancel if not.
+#     - caller can monitor this with some effort
+#     - Recomended: Just ignore and continue on assuming caller uses a relative random target location, usually clears up very quickly
 walk_to_location:
   type: task
   debug: false
   definitions: location
   script:
+    # TO work around cases where MC places character a tad under a block, and thus prevents movement
+    # in some directions we adjust that
+    - define npc_loc <npc.location>
+    - if <[npc_loc].y>  != <[npc_loc].y.round>:
+      - debug log "<aqua>Misalignment detected: adjusting from: <[npc_loc].y>"
+      # .1 is not enough to break things and is JUST enough to work (even through the common .9374 + .05 is not quite on the surface it is close enough)
+      #  Adding .05 worked very well, but still failed
+      - teleport <npc> <npc.location.add[0, .1, 0]>
+    - define debug_start <npc.location>
+
+    # FInd location to walk to
+    - define location <[location].block.add[.5,0,.5]>
+    - if <[location].is_passable.not>:
+      - define location <proc[find_nearby_free_spot].context[<npc.location>|<[location]>]>
+
     - ~walk <npc> <[location]> speed:1 auto_range
+    - debug log "<yellow>FROM: <[debug_start]> TO <green> <[location]>"
+
     # using distance sqared means we need to 2x the allowed distance, so within 2 means gt 4
     - if <npc.location.distance_squared[<[location]>].is[more].to[4]>:
+      # Do not issue message here, new algorithm usually recovers in a couple of trie
       - ~run message_scrolling_status def:navigate_failed
+      - debug log "<red>Walk (<[location]>) cannot reach, stopped at <yellow> (<npc.location>)"
       - determine cancelled
+
+
+# - Find a block next to the target that is walkable. Often used to walk UP tot he crop/harvestable entity but not onto it
+# - to help avoid pathing issues and be suiatble for lumberjacks, miners, havesting cocoa and vines
+# - targets CENTER of block (target) to reduce edge issues with walking path
+find_nearby_free_spot:
+  type: procedure
+  debug: false
+  definitions: source|target
+  script:
+    #  Get adjacent blocks, use a cuboid. This makes it easy to expand if needed
+    # Center on target block to help reduce block offsets when walking
+    - define target <[target].block.add[.5,0,.5]>
+    # Scan up to 2r around the target, this helps get around obsticals (leaves are a problem here)
+    - repeat 2 as:r:
+      - define adjacent <[target].add[<[r]>,0,<[r]>].to_cuboid[<[target].sub[<[r]>,0,<[r]>]>].outline_2d[<[target].y>]>
+      # Filter out non-walkable
+      - define valid_adjacent <[adjacent].filter_tag[<[filter_value].below.material.is_solid.and[<[filter_value].is_passable>]>]>
+      # And now get nearest, start with a match that is WAY WAY off
+      - define prior_distance 9999
+      - define adjacent_target null
+      - foreach <[valid_adjacent]> as:loc :
+        # Use slower sperical distance, helps break ties and for 8 blocks is FAST enough
+        - define loc <[loc].add[.5,0,.5]>
+        - define distance <[source].distance[<[loc]>]>
+        - if <[distance]> < <[prior_distance]>:
+          - define prior_distance <[distance]>
+          - define adjacent_target <[loc]>
+
+      - if <[adjacent_target]> != null:
+        - determine <[adjacent_target]>
+
+    - debug log "<red>No valid walkable blocks near <[target]>"
+    - debug log "<red>Adjacent: <[adjacent]>"
+    - debug log "<red>valid_adjacent: <[valid_adjacent]>"
+    # Someone asked for this so assume they knew what they were doing
+    - determine <[target]>
+
+
 
 
 # - NPC scrolling message. Will displaye each message over the NPC head (name area) and move to next
@@ -486,30 +575,29 @@ message_scrolling_status:
 
     # State is only reset if status is different than prior.
     - define prior_status <npc.flag[status]||null>
-    - if <[status]> && <[status]> != <[prior_status]>:
+    - if <[status]> == null || <[status]> != <[prior_status]>:
       - flag <npc> status:<[status]>
-      - flag npc message.timer:<[current_tick]>
-      - flag npc emotion.timer:<[current_tick]>
-      - flag npc message.seq:1
+      - flag <npc> message.timer:0
+      - flag <npc> emotion.timer:0
+      - flag <npc> message.seq:1
 
     # Recover prior state, if this is too slow then use local variables. But this is cleaner code
     # Do add fallback in case we are initially called with nothing
-    - define status <npc.flag[status]||farming>
-    - define message_timer <npc.flag[message.timer]||<[current_tick]>>
+    - define status <npc.flag[status]||working>
+    - define message_timer <npc.flag[message.timer]||0>
     - define message_sequence <npc.flag[message.seq]||1>
-    - define emotion_timer <npc.flag[emotion.timer]||<[current_tick]>>
+    - define emotion_timer <npc.flag[emotion.timer]||0>
 
     - define messages <proc[pl__config].context[farmer.status.<[status]>.messages]>
     - define emotion <proc[pl__config].context[farmer.status.<[status]>.emotion]>
-
     - if <[messages]>:
       - if <[current_tick].sub[<[message_timer]>]> > 40:
         - define message_sequence:++
         - if <[message_sequence]> > <[messages].size>:
           - define message_sequence 1
 
-        - flag npc message.timer:<[current_tick]>
-        - flag npc message.seq:<[message_sequence]>
+        - flag <npc> message.timer:<[current_tick]>
+        - flag <npc> message.seq:<[message_sequence]>
         - adjust <npc> name:<[messages].get[<[message_sequence]>]>
 
     # In general emotions need to occur on every 5 ticks
@@ -521,7 +609,7 @@ message_scrolling_status:
         # - https://meta.denizenscript.com/Docs/Commands/PlayEffect
         # - https://meta.denizenscript.com/Docs/Languages/Particle%20Effects
 
-        - flag npc emotion.timer:<[current_tick]>
+        - flag <npc> emotion.timer:<[current_tick]>
         - choose <[emotion]>:
           - case angry:
             - playeffect <npc.location.add[0,.5,0]> effect:angry_villager quantity:3 visibility:10 offset:0.4,0.1,0.4
@@ -539,3 +627,4 @@ message_scrolling_status:
             - playeffect <npc.location.add[0,1,0]> effect:cloud quantity:3 visibility:10 offset:0.4,.1,0.4
 
           # - All others do no effects, this includes OK
+
