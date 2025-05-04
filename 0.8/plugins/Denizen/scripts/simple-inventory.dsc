@@ -86,20 +86,6 @@ si__sign_or_frame_events:
   debug: false
   events:
 
-    # ==== TEST CODE just need an easy place to add this
-    #on event SOMETHING
-    #- define item_name "cobblestone"
-    #- if <[item_name].advanced_matches[!*cobblestone|*stone]>:
-    #    - debug log "<green><[item_name]> MATCHED!"
-    #- else:
-    #    - debug log "<red><[item_name]> NO MATCH!"
-
-
-    # - EVENT: after player opens sign : WORKS BUT not needed
-
-    # - EVENT: on/after player cha nges sign : WORKS
-
-
     # === Right click on item frame
     # This just allows the open chest mechanism for frames. The actual inventory managment handling
     # is handled via 'changes framed item'. WE do do a repair here just in case
