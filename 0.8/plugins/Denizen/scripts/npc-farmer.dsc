@@ -39,27 +39,30 @@ helper_villager:
   type: world
   debug: false
   events:
-  
+
     # use AFTER since we need to entity fully spawned, then remove it
     after villager changes profession:
       # Villager must be within radius to composter and within x of the player
-      - debug log "<red>Villager changes: <context.entity> -- <context.profession> -- <context.reason>"
-      - debug log "<green>Loc: <context.entity.location>"
+      #- debug log "<red>Villager changes: <context.entity> -- <context.profession> -- <context.reason>"
+      #- debug log "<green>Loc: <context.entity.location>"
       - define villager <context.entity>
-      - define search_radius <proc[pl__config].context[helpers.search_radius]>
       - define player_radius <proc[pl__config].context[helpers.player_radius]>
-      - debug log "<aqua>Radius: <[search_radius]>"
-      - define players <[villager].location.find_players_within[10]>
+      - define players <[villager].location.find_players_within[<[player_radius]>]>
       - define player <[players].get[1]||null>
       - if <[player]>:
-        - debug log "<green>Player: <[player].name>"
+        - define search_radius <proc[pl__config].context[helpers.search_radius]>
         - define result <proc[helper_find_nearest_farm].context[<context.entity.location>|<[search_radius]>]>
-        - debug log "<green>Villager Farm Result: <[result]>"
         - if <[result].get[ok]>:
-          - debug log "<green>FOUND"
+          - debug log "<green><[result].get[profession]> Helper found at <[villager].location>, near player (<[player].name>) and near farm (<[result].get[farm]>)"
           - ~run helper_npc_spawn def:<[villager]>|<[player]>|<[result].get[profession]>
-      - else:
-        - debug log "<red>FAIL: no player found"
+
+
+    on player right clicks composter:
+      - define result <proc[helper_find_nearest_farm]>
+      #- debug log "<green>Result: <[result]>"
+      - define farm_area <proc[farm_find_bounds_fast].context[<[result].get[farm]>]>
+      - run helpers_highlight_farm def.farm_area:<[farm_area]> def.force:true
+
 
 
 farmer_brain:
@@ -68,8 +71,7 @@ farmer_brain:
   actions:
     # Use this to structure to make sure the NPCs resume on server start
     on spawn:
-      - flag <npc> farmer_home:<npc.location>
-      - run farmer_ai_task delay:5s
+      - debug log "<red>Spawn triggered: <npc> - but we are not doing anything with it"
 
     on assignment:
       - flag <npc> farmer_spawn:<npc.location>
@@ -89,7 +91,7 @@ farmer_brain:
       - flag <npc> reset:true
       - wait 5s
       - flag <npc> reset:!
-      - debug log "<red>ASSIGNMENT"
+      #- debug log "<red>ASSIGNMENT"
       - run farmer_ai_controller
 
     # Tip: triggers (assignment) ar elimted to right click
@@ -162,11 +164,11 @@ farmer_ai_task:
     - define profession <npc.flag[profession]||null>
 
     # - IDENTIFY Farm Boundries
-    # - Performance is not an issue here, since the script has extensive pauses
+    # - This takes abou 2ms to 3ms to scan a farly large farm area na updtae settings. Assuming 20 or so total farms and that is faro too much to do every cycle
+    # - By only scanning if needed this is VERY fast (under 1 ms)
     # Identify if the farmer home has been identified
     - if <[base_loc]> == null or <[chest_loc]> == null or <[farm_area]> == null:
       - define result <proc[helper_find_nearest_farm].context[<npc.location>]>
-      - debug log "<green>Scan Result: <[result]>"
       - if <[result].get[ok]>:
         # Update local settings
         - define base_loc <[result].get[farm]>
@@ -174,13 +176,13 @@ farmer_ai_task:
         - define profession <[result].get[profession]>
         - define farm_area <proc[farm_find_bounds_fast].context[<[base_loc]>]>
 
-         # Update persistence data
+        # Update persistence data
         - flag <npc> base_loc:<[result].get[farm]>
         - flag <npc> chest_loc:<[result].get[chest]>
         - flag <npc> profession:<[result].get[profession]>
         - flag <npc> farm_area:<[farm_area]>
 
-        - debug log "<Aqua>Settings: <[base_loc]> -- <[chest_loc]> -- <[profession]> -- <[farm_area]>"
+        #- debug log "<Aqua>Settings: <[base_loc]> -- <[chest_loc]> -- <[profession]> -- <[farm_area]>"
 
         # Highlight base
         - flag npc farm_highlight:0
@@ -190,13 +192,12 @@ farmer_ai_task:
         - define base_loc null
         - flag <npc> base_loc:null
 
-
     # Catch all
     - if <[base_loc]>  == null:
       - run message_scrolling_status def:farm_broken
       - determine delay:4s
 
-    # Show outline of farm for a few seconds will stop ater cycle complets
+    # Keeps farm highlight alive for a time
     - run helpers_highlight_farm
 
     # - Tool pickup
@@ -252,8 +253,8 @@ farmer_ai_task:
               - ~run walk_to_location def:<[crop]> save:<[sid]>
               - define results <proc[queue_parse].context[<entry[<[sid]>].created_queue.determination||list[]>]>
               - if <[results].get[cancelled]||false>:
-                  # Continue scaning for another crop, maybe we can reach that
-                  - foreach next
+                  # Stop scanning, it gets expensive, just let it try again next opertunity
+                  - foreach stop
 
               # Check (indirectly) if crop is directional (ie; cocoa bans)
               - define prior_crop <[crop].material.name>
@@ -262,6 +263,11 @@ farmer_ai_task:
               - animate <npc> animation:SWING_MAIN_HAND
               # WAIT for the break to finish, otherwis it can harvest the placed item (even with 3t) delay
               # this was seen with cocoa
+              # Prevent modest race conditions where two farmers race to a single crop. THis is not perfect
+              # but should prevent most of the "dups"
+              - if <[crop].material.age.is[less].than[<[crop].material.maximum_age>]>:
+                - stop
+
               - ~break <[crop]> <npc>
 
               # Need to wait a tick for item to pop into the world reliably, but for athetics we wait a bit longer
@@ -317,7 +323,7 @@ farmer_deliver_task:
     - define chest <[chest_loc].inventory>
 
     # Skip air andtool match, unload all the rest
-    - define ignore <proc[helper_config_for_npc].context[too_match]>
+    - define ignore <proc[helper_config_for_npc].context[tool_match]>
     - define ingnore:->:air
     - define items <npc.inventory.list_contents.filter_tag[<[filter_value].material.name.advanced_matches[<[ignore]>].not>]>
     - foreach <[items]> as:item:
@@ -380,7 +386,7 @@ farm_find_bounds_fast:
     - define corner2 <location[<[east].x>,<[origin].y.add[0]>,<[north].z>,<[world]>]>
 
     - define farm_area <[corner1].to_cuboid[<[corner2]>]>
-    - debug log "<red>Cuboid Farm: <[farm_area]>"
+    #- debug log "<red>Cuboid Farm: <[farm_area]>"
     - determine <[farm_area]>
 
 
@@ -412,7 +418,8 @@ scan_direction:
       - define mat <[mat_loc].material.name>
       - if <[valid_blocks].contains[<[mat]>].not>:
           # Water level is always one block below farm base
-          - define water_level <[scan_loc].sub[0,-1, 0]>
+          - define water_level <[scan_loc].sub[0,1,0]>
+          #- debug log "<red>Chect water: <[water_level]> --- <[scan_loc]> -- <[water_level].material.name>"
           # Water like blocks are ALLWOED so if not a water block (and not a valid mat per above) we found an invalid block
           # Probably faster than checking if it can or cannot be waterlogged.
           - if <[water_level].material.name> != water and <[water_level].material.waterlogged.if_null[false].not>:
@@ -637,10 +644,10 @@ helper_find_nearest_farm:
       - define valid_chests <[config].deep_get[valid_farm.chest]>
       - define trigger_block <[config].deep_get[valid_farm.trigger]>
       - define found_triggers <[farm_search_area].blocks[<[trigger_block]>]>
-      - debug log "<red>Found: <[trigger_block]> -- <[found_triggers]>"
+      #- debug log "<red>Found: <[trigger_block]> -- <[found_triggers]>"
 
       - foreach <[found_triggers]> as:base_loc_tmp :
-        - debug log "<red>Checking Profession: <[profession]> -- <[base_loc_tmp]>"
+        #- debug log "<red>Checking Profession: <[profession]> -- <[base_loc_tmp]>"
 
         # IF a farm was found quickly check if this one is closer
         - if <[found_farm]> != null:
@@ -650,18 +657,18 @@ helper_find_nearest_farm:
 
         # Check validtiy of farm structure
         - define block_below <[base_loc_tmp].below>
-        - debug log "<aqua>BELOW: <[block_below]>"
+        #- debug log "<aqua>BELOW: <[block_below]>"
         - if <[block_below].material.name> == water or <[block_below].material.waterlogged||false>:
-          - debug log "<red>Found water/logged: <[block_below]>"
+          #- debug log "<red>Found water/logged: <[block_below]>"
           - define block_below <[block_below].below>
         - define base_substrate <[config].deep_get[valid_farm.substrate]>
-        - debug log "<red>Substrate?: <[block_below].material> -- <[base_substrate]>"
+        #- debug log "<red>Substrate?: <[block_below].material> -- <[base_substrate]>"
         - if <[block_below].material.name.advanced_matches[<[base_substrate]>]>:
-          - debug log "<red>Found Substrate: <[base_substrate]>"
+          #- debug log "<red>Found Substrate: <[base_substrate]>"
           # See if there is a chest on it
           - define chest_loc_tmp <[base_loc_tmp].add[0,1,0]>
           - if <[chest_loc_tmp].material.name.advanced_matches[<[valid_chests]>]>:
-            - debug log "<red>Found Chest: <[chest_loc_tmp]>"
+            #- debug log "<red>Found Chest: <[chest_loc_tmp]>"
             - define found_profession <[profession]>
             - define found_farm <[base_loc_tmp]>
             - define found_chest <[chest_loc_tmp]>
@@ -675,16 +682,24 @@ helper_find_nearest_farm:
 helpers_highlight_farm:
   type: task
   debug: false
-  definitions: farm_area
+  definitions: farm_area|force
   script:
-    - define farm_area <[farm_area]||<npc.flag[farm_area]>||null>
-    - if <[farm_area]> == null:
-      - stop
-
     # Show outline of farm for a few seconds
-    - if <util.current_tick.sub[<npc.flag[farm_highlight]||0>]> < 200:
-      - debug log "<red>Play effect: <[farm_area].outline_2d[<npc.location.y.add[3]>]>"
-      - playeffect effect:angry_villager at:<[farm_area].outline_2d[<npc.location.y.add[3]>]> quantity:2  visibility:32 offset:0.4,0.1,0.4
+    - if <[force]||false>:
+      - flag server helpers_farm_highlight:<util.current_tick>
+
+    - if <util.current_tick.sub[<server.flag[helpers_farm_highlight]||0>]> < 500:
+      - define farm_area <[farm_area]||<npc.flag[farm_area]||null>>
+      - if <[farm_area]> == null:
+        - stop
+
+      - define y_height <[farm_area].max.y.add[2]>
+      - define farm_border <[farm_area].outline_2d[<[y_height]>]>
+      - define farm_border <[farm_border].parse_tag[<[parse_value].center>]>
+      #- debug log "<gold>Farm border: <[farm_border]>"
+      - playeffect effect:flame at:<[farm_border]> quantity:1  visibility:32 offset:0.0,0.1,0.0
+      - wait 5t
+
 
 # = Scan for tool item and if found use it
 helper_pick_up_tool:
@@ -696,7 +711,9 @@ helper_pick_up_tool:
     #   Drop area is one below cuboid (items site on TOP of a block so you need to look at the block one below you expect to, or so it seems)
     - define farm_area <npc.flag[farm_area]>
     - define profession <npc.flag[profession]>
-    - define drop_area <[farm_area].expand_one_side[0,-2,0].expand_one_side[0,2,0]>
+    # Expand top and bottom to make it easier to find item sthat might have fallen into water
+    # or ot top of something else. It's fast since entity scanning is WAY faster than block scanning
+    - define drop_area <[farm_area].expand_one_side[0,-2,0].expand_one_side[0,1,0]>
     - define tool_matcher <proc[helper_config_for_npc].context[tool_match]>
 
     # See if Farmer can find a hoe and equip it, once grabbed the hoe
@@ -707,14 +724,13 @@ helper_pick_up_tool:
     #   'item' - matches any items but no players or NPCs
     #     And we want dispensors to be able to auto replenish farms so 'item' it us
     - define found_tools <[drop_area].entities[item]>
-    - foreach <[found_tools]> as:tool :
+    - foreach <[found_tools]> as:entity :
       # This if handles if an item is not a material (which should never happen since we filter in entiies[item] above, but it's a nice safety)
-      - if <[tool].item.material.name.if_null[false].advanced_matches[<[tool_matcher]>].not>:
-        - debug log "<red>Tool: <[tool]> is NOT expected"
+      - if <[entity].item.material.name.if_null[false].advanced_matches[<[tool_matcher]>].not>:
         - foreach next
 
-      - define tool <[tool].item>
-      - define tool_loc <[tool].location>
+      - define tool <[entity].item>
+      - define tool_loc <[entity].location>
       - look <npc> <[tool_loc]>
       - ~walk <npc> <[tool_loc]> speed:1 auto_range
       # Check hoe near it to make the mesage clearer
@@ -722,7 +738,14 @@ helper_pick_up_tool:
         - run message_scrolling_status def:invalid_item
         - stop
 
+      #  NOTE: ignoring race conditions If players want to carefully time things for modest item duplication
+      #  such as farm harvests and farm tools, call it a game mechanic. Getting it perfect is hard anyway given minecrafts
+      #  lack of atomic inventory handling.
+      - if <[entity].is_spawned.not>:
+        - stop
+
       # Remove any existing hoes, they are instantly consumed
+      - debug log "<red>Removing HOE"
       - define existing_tools <npc.inventory.list_contents.filter_tag[<[filter_value].material.name.advanced_matches[<[tool_matcher]>]>]>
       - foreach <[existing_tools]> as:item :
         - take item:<[item]> from:<npc.inventory>
@@ -730,7 +753,7 @@ helper_pick_up_tool:
       # Transfer hoe from ground to the NPC
       - animate <npc> animation:SWING_MAIN_HAND
       - equip <npc> hand:<[tool]>
-      - remove <[tool]>
+      - remove <[entity]>
       - run message_scrolling_status def:thank_you
 
 
@@ -742,6 +765,7 @@ helper_npc_spawn:
   debug: false
   definitions: villager|owner|profession
   script:
+    - define debug "<gold>NPC Spawn Logic"
     - define location <[villager].location>
     - create player Helper<[profession]> <[location]> save:npc_new
     - define new_npc <entry[npc_new].created_npc>
@@ -757,7 +781,7 @@ helper_npc_spawn:
         - define item <item[<[style].get[type]>]>
         - define color <[style].get[color]||null>
         - if <[color]>:
-          - define item <[item].color[<[color]>]>
+          - adjust <[item]> color:<[color]>
         # The equip requires a constant and apparently that happens before PARSING (so parsing is even weirder than I suspected). IN this case tags of the form 'tag_name:' are processed as arguments literals and their right side then PARSED.
         - choose <[item_type]>:
           - case head:
@@ -770,6 +794,10 @@ helper_npc_spawn:
             - equip <[new_npc]> boots:<[item]>
     - else:
       - debug log "<red>Villager at <[location]> cannot find uniform for <[profession]>"
+
+    - adjust <[new_npc]> set_protected:false
+    - pushable <[new_npc]>:true
+    - adjust <[new_npc]> collidable:true
 
     - assignment set script:farmer_brain to:<[new_npc]>
 
