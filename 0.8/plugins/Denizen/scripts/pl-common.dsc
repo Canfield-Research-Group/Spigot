@@ -208,7 +208,7 @@ create_cuboid_from_location:
 # *** some internal cunboid rounding and, more critically, the y (height)
 # *** flooring that is done. It will nto allow world boundries to be exceeded
 # *** so the veriical center is often lost from what was original used to create the cuboid.
-# *** 
+# ***
 # *** Useful for accurate nearest-target sorting with a cubic limit for user clarity.
 # ***
 cuboid_distance_from_center:
@@ -246,7 +246,7 @@ narrate_list:
         - define use_color <[color]||"">
 
         - foreach <[list]> as:line:
-            - narrate "<[use_color]><[line]>" targets:<[target_player]>
+            - narrate <[use_color]><[line]> targets:<[target_player]>
 
 
 
