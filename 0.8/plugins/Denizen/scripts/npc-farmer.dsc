@@ -4,7 +4,7 @@
 # Mostly AI example
 #
 # Versions:
-#   latest as of 2025-04-29 is and FAILS in MC 1.21.4 : Citizens-2.0.38-b3786.jar 
+#   latest as of 2025-04-29 is and FAILS in MC 1.21.4 : Citizens-2.0.38-b3786.jar
 #   Identified version based on Spigot uplaod date (which is paid): Citizens-2.0.38-b3781.jat (2025-04-14 09:00:57)
 #
 # Working
@@ -28,12 +28,6 @@
 #           - Create a cuboid of this area
 #
 
-# USAGE:
-#  /npc create TestFarmer --type player
-#  /npc select (click the NPC)
-#  /npc assignment --set farmer_brain
-
-
 # MOSTLY for admins, reset flag when farmer respawns
 helper_villager:
   type: world
@@ -51,27 +45,22 @@ helper_villager:
       - define player <[players].get[1]||null>
       - if <[player]>:
         - define search_radius <proc[pl__config].context[helpers.search_radius]>
-        - define result <proc[helper_find_nearest_farm].context[<context.entity.location>|<[search_radius]>]>
+        - define result <proc[helper_find_nearest_working_area].context[<context.entity.location>|<[search_radius]>]>
         - if <[result].get[ok]>:
           - debug log "<green><[result].get[profession]> Helper found at <[villager].location>, near player (<[player].name>) and near farm (<[result].get[farm]>)"
           - ~run helper_npc_spawn def:<[villager]>|<[player]>|<[result].get[profession]>
 
 
     on player right clicks composter:
-      - define result <proc[helper_find_nearest_farm]>
+      - define result <proc[helper_find_nearest_working_area]>
       #- debug log "<green>Result: <[result]>"
-      - define farm_area <proc[farm_find_bounds_fast].context[<[result].get[farm]>]>
+      - define farm_area <proc[helper_get_working_area].context[<[result].get[farm]>]>
       - run helpers_highlight_farm def.farm_area:<[farm_area]> def.force:true
 
-
-
-farmer_brain:
+helper_brain:
   type: assignment
   debug: false
   actions:
-    # Use this to structure to make sure the NPCs resume on server start
-    on spawn:
-      - debug log "<red>Spawn triggered: <npc> - but we are not doing anything with it"
 
     on assignment:
       - flag <npc> farmer_spawn:<npc.location>
@@ -92,7 +81,7 @@ farmer_brain:
       - wait 5s
       - flag <npc> reset:!
       #- debug log "<red>ASSIGNMENT"
-      - run farmer_ai_controller
+      - run helper_ai_controller
 
     # Tip: triggers (assignment) ar elimted to right click
     on click:
@@ -110,11 +99,11 @@ farmer_brain:
             - flag <npc> leashed:!
         - else:
           - flag <npc> leashed:true
-          - run message_scrolling_status def:finishing_work
+          - run helper_scrolling_nametag def:finishing_work
         - stop
 
 
-farmer_ai_controller:
+helper_ai_controller:
   type: task
   debug: false
   script:
@@ -124,17 +113,17 @@ farmer_ai_controller:
 
     - define wait_time  <proc[pl__config].context[helpers.professions.farmer.wait_time]>
 
-    - define queue_id farmer_ai_task<npc.id>
+    - define queue_id helper_ai_task<npc.id>
     - define sid myscript_<util.current_tick>
-    - ~run farmer_ai_task id:<[queue_id]> save:<[sid]>
+    - ~run helper_ai_task id:<[queue_id]> save:<[sid]>
     - define results <proc[queue_parse].context[<entry[<[sid]>].created_queue.determination||list[]>]>
     - define delay <[results].get[delay]||<[wait_time]>>
     #- debug log "<aqua><util.queues>"
     # Recycle to keep brain controler alive
-    - run farmer_ai_controller id:farmer_ai_controller<npc.id> delay:<[delay]>
+    - run helper_ai_controller id:helper_ai_controller<npc.id> delay:<[delay]>
 
 
-farmer_ai_task:
+helper_ai_task:
   type: task
   debug: false
   script:
@@ -151,7 +140,7 @@ farmer_ai_task:
     - if <npc.has_flag[leashed]>:
       # Force a re-evaluation of the farm
       - flag <npc> base_loc:null
-      - ~run leash_follow_task
+      - ~run helper_npc_follow
       # This task runs much quicker so NPC keeps up
       - determine delay:10t
       - stop
@@ -168,13 +157,13 @@ farmer_ai_task:
     # - By only scanning if needed this is VERY fast (under 1 ms)
     # Identify if the farmer home has been identified
     - if <[base_loc]> == null or <[chest_loc]> == null or <[farm_area]> == null:
-      - define result <proc[helper_find_nearest_farm].context[<npc.location>]>
+      - define result <proc[helper_find_nearest_working_area].context[<npc.location>]>
       - if <[result].get[ok]>:
         # Update local settings
         - define base_loc <[result].get[farm]>
         - define chest_loc <[result].get[chest]>
         - define profession <[result].get[profession]>
-        - define farm_area <proc[farm_find_bounds_fast].context[<[base_loc]>]>
+        - define farm_area <proc[helper_get_working_area].context[<[base_loc]>]>
 
         # Update persistence data
         - flag <npc> base_loc:<[result].get[farm]>
@@ -194,8 +183,11 @@ farmer_ai_task:
 
     # Catch all
     - if <[base_loc]>  == null:
-      - run message_scrolling_status def:farm_broken
+      - run helper_scrolling_nametag def:farm_broken
       - determine delay:4s
+
+    - define tool_required <proc[helper_config_for_npc].context[tool_match]>
+
 
     # Keeps farm highlight alive for a time
     - run helpers_highlight_farm
@@ -206,7 +198,8 @@ farmer_ai_task:
     # - Check for NPC inventory needing emptying
     # Check if farmer needs to add to the chest, and if full add animation
     - if <npc.inventory.quantity_item> > 32:
-        - ~run farmer_deliver_task
+
+        - ~run helper_deliver_task
         # If after transfering items the farm still does not have an empty slow then we assume they are full
         # and the chest is full. Since tasks do NOT return (easily) a value this seems the fastest way
         - if <npc.inventory.empty_slots> == 0:
@@ -216,11 +209,8 @@ farmer_ai_task:
           - flag <npc> "log:Farmer inventory is full"
           - stop
 
-    # Clear log
-    - flag <npc> log:null
-
-    - if <npc.inventory.contains_item[*_hoe].not>:
-      - run message_scrolling_status def:need_item
+    - if <npc.inventory.contains_item[<[tool_required]>].not>:
+      - run helper_scrolling_nametag def:need_item
       - stop
 
 
@@ -229,9 +219,8 @@ farmer_ai_task:
     # Tracks if the NPC should be forced towalk during idle, useful to try and get unstuck from harvesting
     - define force_walk false
 
-    - run message_scrolling_status def:working
-    - if <npc.inventory.contains_item[*_hoe]>:
-
+    - run helper_scrolling_nametag def:working
+    - if <npc.inventory.contains_item[<[tool_required]>]>:
       # TIP: We cannot easily prefilter since different crops have different maximum mages, so we scan it ...
       # .within[<[search_radius]>].filter_tag[<[filter_value].material.age.is[or_more].than[<[crop_max_age]>]>]>
       - define crop_list <[farm_area].blocks[<[valid_crops]>]>
@@ -246,11 +235,11 @@ farmer_ai_task:
 
             - if <[crop].material.age.is[or_more].than[<[crop].material.maximum_age>]>:
               # This complex mantra call as task, waits for it to finish and then sees if it was cancled (errored)
-              - define near_crop <proc[find_nearby_free_spot].context[<npc.location>|<[crop]>]>
+              - define near_crop <proc[helper_find_safe_loc].context[<npc.location>|<[crop]>]>
 
               - define sid myscript_<util.current_tick>
               # WARNING: THis method can CHANGE destination due to path blocked. So let it handle any anomolies
-              - ~run walk_to_location def:<[crop]> save:<[sid]>
+              - ~run helper_walk_to def:<[crop]> save:<[sid]>
               - define results <proc[queue_parse].context[<entry[<[sid]>].created_queue.determination||list[]>]>
               - if <[results].get[cancelled]||false>:
                   # Stop scanning, it gets expensive, just let it try again next opertunity
@@ -265,7 +254,7 @@ farmer_ai_task:
               # this was seen with cocoa
               # Prevent modest race conditions where two farmers race to a single crop. THis is not perfect
               # but should prevent most of the "dups"
-              - if <[crop].material.age.is[less].than[<[crop].material.maximum_age>]>:
+              - if <[crop].material.name> != air && <[crop].material.age.is[less].than[<[crop].material.maximum_age>]>:
                 - stop
 
               - ~break <[crop]> <npc>
@@ -295,11 +284,12 @@ farmer_ai_task:
 
               - define harvested true
               # Only one harvested block per AI run
+
               - foreach stop
 
     - if <[harvested].not>:
         # Wander a bit between harvesting
-        - run farmer_wander_task instantly
+        - run helper_wander_task instantly
 
     # Run each NPC in it's own queue
     # NOTE: AVOID WHILE Loops or any long lived loop as the script here can be tied to the NPC
@@ -309,11 +299,11 @@ farmer_ai_task:
 
 
 # - Delivery items from NPC to chest
-farmer_deliver_task:
+helper_deliver_task:
   type: task
   debug: false
   script:
-    - run message_scrolling_status def:unloading
+    - run helper_scrolling_nametag def:unloading
 
     - define chest_loc <npc.flag[chest_loc]||null>
     - define look_target <[chest_loc].add[0,0,0]>
@@ -330,7 +320,6 @@ farmer_deliver_task:
       # Simpel quick check for space available, if not then just stop
       - define space_available <[chest].can_fit[<[item]>]>
       - if <[space_available].not>:
-        # Place animation over chest
         - stop
 
       # Inventory sucks -- to avoid ghost items we move by name, it's easier but cannot reliable move
@@ -344,7 +333,7 @@ farmer_deliver_task:
 
 
 # - Famer wanders a bit randomly, turning head looking around and occasionally walking. Simplistic but works
-farmer_wander_task:
+helper_wander_task:
   type: task
   debug: false
   definitions: force_walk
@@ -363,22 +352,22 @@ farmer_wander_task:
     #   In any case do NOT check for sucess on walking, it is not worth it and could result in very long delays
     #   Caller uses to to just look busy OR to help get unstuck, and will just try again if needed
     - if <[force_walk]> or <util.random_chance[15]>:
-      - ~run walk_to_location def:<[wander_loc]>
+      - ~run helper_walk_to def:<[wander_loc]>
 
 
 # - Give an origin identify boundries of a farm based on PLANTED crops
 # - of any mix.
-farm_find_bounds_fast:
+helper_get_working_area:
   type: procedure
   debug: false
   definitions: origin
   script:
     # Relative cordinates for each axis
     - define world <[origin].world.name>
-    - define north <proc[scan_direction].context[<[origin]>|<location[0,0,-1]>]>
-    - define south <proc[scan_direction].context[<[origin]>|<location[0,0,1]>]>
-    - define west <proc[scan_direction].context[<[origin]>|<location[-1,0,0]>]>
-    - define east <proc[scan_direction].context[<[origin]>|<location[1,0,0]>]>
+    - define north <proc[helper_scanto_edge].context[<[origin]>|<location[0,0,-1]>]>
+    - define south <proc[helper_scanto_edge].context[<[origin]>|<location[0,0,1]>]>
+    - define west <proc[helper_scanto_edge].context[<[origin]>|<location[-1,0,0]>]>
+    - define east <proc[helper_scanto_edge].context[<[origin]>|<location[1,0,0]>]>
 
     #- debug log "<red>N: <[north]>, S: <[south]>, W: <[west]>, E: <[east]> -- <[origin]>"
 
@@ -392,7 +381,7 @@ farm_find_bounds_fast:
 
 # - Scan a direction, specified by an relative cordinate (0,0,1) as delta
 # - When encountering an invalid crop block stop and return prior value
-scan_direction:
+helper_scanto_edge:
   type: procedure
   debug: false
   definitions: origin|delta
@@ -432,7 +421,7 @@ scan_direction:
 
 
 # - NPC follows leash
-leash_follow_task:
+helper_npc_follow:
   type: task
   debug: false
   script:
@@ -442,7 +431,7 @@ leash_follow_task:
     - flag <npc> leashed:!
     - stop
 
-  - run message_scrolling_status def:following
+  - run helper_scrolling_nametag def:following
 
   - if <npc.location.distance[<npc.owner.location>].is[or_more].to[2]>:
     - walk <npc> <npc.owner.location> auto_range speed:1
@@ -458,7 +447,7 @@ leash_follow_task:
 #   - Checks if taget was reached within 2 or so, issues a cancel if not.
 #     - caller can monitor this with some effort
 #     - Recomended: Just ignore and continue on assuming caller uses a relative random target location, usually clears up very quickly
-walk_to_location:
+helper_walk_to:
   type: task
   debug: false
   definitions: location
@@ -477,7 +466,7 @@ walk_to_location:
     # FInd location to walk to
     - define location <[location].block.add[.5,0,.5]>
     - if <[location].is_passable.not>:
-      - define location <proc[find_nearby_free_spot].context[<npc.location>|<[location]>]>
+      - define location <proc[helper_find_safe_loc].context[<npc.location>|<[location]>]>
 
     - ~walk <npc> <[location]> speed:1 auto_range
     #- debug log "<yellow>FROM: <[debug_start]> TO <green> <[location]>"
@@ -490,7 +479,7 @@ walk_to_location:
 # - Find a block next to the target that is walkable. Often used to walk UP tot he crop/harvestable entity but not onto it
 # - to help avoid pathing issues and be suiatble for lumberjacks, miners, havesting cocoa and vines
 # - targets CENTER of block (target) to reduce edge issues with walking path
-find_nearby_free_spot:
+helper_find_safe_loc:
   type: procedure
   debug: false
   definitions: source|target
@@ -531,7 +520,7 @@ find_nearby_free_spot:
 # -
 # - status : Name of message action, see configuration file. If nothing is passed then the prior state
 # - is maintained. Use this to update scrolling messages/emotion animations when in loops without a know state
-message_scrolling_status:
+helper_scrolling_nametag:
   type: task
   debug: false
   definitions: status
@@ -556,6 +545,7 @@ message_scrolling_status:
 
     - define messages <proc[pl__config].context[helpers.professions.farmer.status.<[status]>.messages]>
     - define emotion <proc[pl__config].context[helpers.professions.farmer.status.<[status]>.emotion]>
+
     - if <[messages]>:
       - if <[current_tick].sub[<[message_timer]>]> > 40:
         - define message_sequence:++
@@ -564,7 +554,19 @@ message_scrolling_status:
 
         - flag <npc> message.timer:<[current_tick]>
         - flag <npc> message.seq:<[message_sequence]>
-        - adjust <npc> name:<[messages].get[<[message_sequence]>]>
+        - define new_name <[messages].get[<[message_sequence]>]>
+
+        # Per web:
+        # this triggers on spawn again if it causes the NPC to be despawned and re-spawned under the hood — which can happen if:
+        # You change the NPC’s name while it’s not currently spawned, and then some other code or Citizens automatically respawns it.
+        # Or worse: some edge cases in Citizens can cause a name change to trigger a re-initialization that looks like a respawn.
+        #
+        #  This can be  triggered by a name change due to citizens interactions
+        #  Tried teleporting to see if that fixed NPCs with the respawn issue in the on spawn).
+        #  And so far nothing is preventing this access except reducing the name change
+        - if <npc.is_spawned> and <npc.name> != <[new_name]>:
+            #- debug log "NPC <npc> is spawned. Renaming <npc.name> to: <[new_name]>"
+            - adjust <npc> name:<[new_name]>
 
     # In general emotions need to occur on every 5 ticks
     #    This will normallyu always file sinze there are a lot of waits in NPC handling. But some actions may
@@ -607,7 +609,7 @@ helpers_valid_crops:
 # === TODO: This is sub-optimal, a better way is to find all trigger blocks, then loop through those, but that is more work and this shoudl be plenty fast enought and easier to maintain
 # = location : Location to initiate search from.
 # = radius : Range around the location to search
-helper_find_nearest_farm:
+helper_find_nearest_working_area:
   type: procedure
   debug: false
   definitions: location|radius
@@ -735,7 +737,7 @@ helper_pick_up_tool:
       - ~walk <npc> <[tool_loc]> speed:1 auto_range
       # Check hoe near it to make the mesage clearer
       - if <[tool].enchantment_map.is_empty.not>:
-        - run message_scrolling_status def:invalid_item
+        - run helper_scrolling_nametag def:invalid_item
         - stop
 
       #  NOTE: ignoring race conditions If players want to carefully time things for modest item duplication
@@ -754,7 +756,7 @@ helper_pick_up_tool:
       - animate <npc> animation:SWING_MAIN_HAND
       - equip <npc> hand:<[tool]>
       - remove <[entity]>
-      - run message_scrolling_status def:thank_you
+      - run helper_scrolling_nametag def:thank_you
 
 
 # == Convert a villager to an NPC
@@ -799,7 +801,7 @@ helper_npc_spawn:
     - pushable <[new_npc]>:true
     - adjust <[new_npc]> collidable:true
 
-    - assignment set script:farmer_brain to:<[new_npc]>
+    - assignment set script:helper_brain to:<[new_npc]>
 
 # = Fetch the NPC configuration path
 # - Uses current NPC
