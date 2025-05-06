@@ -29,7 +29,7 @@
 #
 
 # MOSTLY for admins, reset flag when farmer respawns
-helper_villager:
+helpers_villager:
   type: world
   debug: false
   events:
@@ -40,35 +40,35 @@ helper_villager:
       #- debug log "<red>Villager changes: <context.entity> -- <context.profession> -- <context.reason>"
       #- debug log "<green>Loc: <context.entity.location>"
       - define villager <context.entity>
-      - define player_radius <proc[pl__config].context[helpers.player_radius]>
+      - define player_radius <proc[helpers_config].context[player_radius]>
       - define players <[villager].location.find_players_within[<[player_radius]>]>
       - define player <[players].get[1]||null>
       - if <[player]>:
-        - define search_radius <proc[pl__config].context[helpers.search_radius]>
-        - define result <proc[helper_find_nearest_working_area].context[<context.entity.location>|<[search_radius]>]>
+        - define search_radius <proc[helpers_config].context[search_radius]>
+        - define result <proc[helpers_find_nearest_working_area].context[<context.entity.location>|<[search_radius]>]>
         - if <[result].get[ok]>:
           - debug log "<green><[result].get[profession]> Helper found at <[villager].location>, near player (<[player].name>) and near farm (<[result].get[farm]>)"
-          - ~run helper_npc_spawn def:<[villager]>|<[player]>|<[result].get[profession]>
+          - ~run helpers_npc_spawn def:<[villager]>|<[player]>|<[result].get[profession]>
 
 
     on player right clicks composter:
-      - define result <proc[helper_find_nearest_working_area]>
-      #- debug log "<green>Result: <[result]>"
-      - define farm_area <proc[helper_get_working_area].context[<[result].get[farm]>]>
-      - run helpers_highlight_farm def.farm_area:<[farm_area]> def.force:true
+      - define result <proc[helpers_find_nearest_working_area]>
+      - if <[result].get[ok]>:
+        - debug log "<green>Result: <[result]>"
+        - define farm_area <[result].get[farm_area]>
+        - debug log "<green>DONE: <[farm_area]>"
+        - run helpers_highlight_farm def.farm_area:<[farm_area]> def.force:true
+      - else:
+        - narrate "<red>Block is not a farm trigger. Is it crafted correctly?"
 
-helper_brain:
+helpers_brain:
   type: assignment
   debug: false
   actions:
 
     on assignment:
-      - flag <npc> farmer_spawn:<npc.location>
       # Force farm to be re-scaned
       - flag <npc> base_loc:null
-      # Set path finding to be within 2 (default is 1)
-      - adjust <npc> path_distance_margin:2
-
       - trigger name:click state:true
       - trigger name:proximity state:true
 
@@ -81,7 +81,7 @@ helper_brain:
       - wait 5s
       - flag <npc> reset:!
       #- debug log "<red>ASSIGNMENT"
-      - run helper_ai_controller
+      - run helpers_ai_controller
 
     # Tip: triggers (assignment) ar elimted to right click
     on click:
@@ -94,16 +94,16 @@ helper_brain:
         - narrate "<green>Returned to a villager"
         - stop
       - if <npc.owner.item_in_hand.material.name> == lead:
-        - if <npc.has_flag[leashed]>:
+        - if <npc.has_flag[is_following]>:
             - narrate "<green>released!"
-            - flag <npc> leashed:!
+            - flag <npc> is_following:!
         - else:
-          - flag <npc> leashed:true
-          - run helper_scrolling_nametag def:finishing_work
+          - flag <npc> is_following:true
+          - run helpers_scrolling_nametag def:finishing_work
         - stop
 
 
-helper_ai_controller:
+helpers_ai_controller:
   type: task
   debug: false
   script:
@@ -111,19 +111,19 @@ helper_ai_controller:
     - if <npc.is_spawned.not>:
       - stop
 
-    - define wait_time  <proc[pl__config].context[helpers.professions.farmer.wait_time]>
+    - define wait_time  <proc[helpers_config_for_npc].context[wait_time]>
 
-    - define queue_id helper_ai_task<npc.id>
+    - define queue_id helpers_ai_task<npc.id>
     - define sid myscript_<util.current_tick>
-    - ~run helper_ai_task id:<[queue_id]> save:<[sid]>
+    - ~run helpers_ai_task id:<[queue_id]> save:<[sid]>
     - define results <proc[queue_parse].context[<entry[<[sid]>].created_queue.determination||list[]>]>
     - define delay <[results].get[delay]||<[wait_time]>>
     #- debug log "<aqua><util.queues>"
     # Recycle to keep brain controler alive
-    - run helper_ai_controller id:helper_ai_controller<npc.id> delay:<[delay]>
+    - run helpers_ai_controller id:helpers_ai_controller<npc.id> delay:<[delay]>
 
 
-helper_ai_task:
+helpers_ai_task:
   type: task
   debug: false
   script:
@@ -132,15 +132,15 @@ helper_ai_task:
       - stop
 
     # Valid chests
-    - define valid_chests <proc[pl__config].context[helpers.professions.farmer.valid_farm.chest]>
+    - define valid_chests <proc[helpers_config_for_npc].context[valid_farm.chest]>
     # Valid crops the farm will harvest
-    - define valid_crops <proc[pl__config].context[helpers.professions.farmer.crops].keys>
+    - define valid_crops <proc[helpers_config_for_npc].context[crops].keys>
 
     # - Simulate LEASH
-    - if <npc.has_flag[leashed]>:
+    - if <npc.has_flag[is_following]>:
       # Force a re-evaluation of the farm
       - flag <npc> base_loc:null
-      - ~run helper_npc_follow
+      - ~run helpers_npc_follow
       # This task runs much quicker so NPC keeps up
       - determine delay:10t
       - stop
@@ -157,13 +157,13 @@ helper_ai_task:
     # - By only scanning if needed this is VERY fast (under 1 ms)
     # Identify if the farmer home has been identified
     - if <[base_loc]> == null or <[chest_loc]> == null or <[farm_area]> == null:
-      - define result <proc[helper_find_nearest_working_area].context[<npc.location>]>
+      - define result <proc[helpers_find_nearest_working_area].context[<npc.location>]>
       - if <[result].get[ok]>:
         # Update local settings
         - define base_loc <[result].get[farm]>
         - define chest_loc <[result].get[chest]>
         - define profession <[result].get[profession]>
-        - define farm_area <proc[helper_get_working_area].context[<[base_loc]>]>
+        - define farm_area <[result].get[farm_area]>
 
         # Update persistence data
         - flag <npc> base_loc:<[result].get[farm]>
@@ -183,23 +183,23 @@ helper_ai_task:
 
     # Catch all
     - if <[base_loc]>  == null:
-      - run helper_scrolling_nametag def:farm_broken
+      - run helpers_scrolling_nametag def:farm_broken
       - determine delay:4s
 
-    - define tool_required <proc[helper_config_for_npc].context[tool_match]>
+    - define tool_required <proc[helpers_config_for_npc].context[tool_match]>
 
 
     # Keeps farm highlight alive for a time
     - run helpers_highlight_farm
 
     # - Tool pickup
-    - ~run helper_pick_up_tool
+    - ~run helpers_pick_up_tool
 
     # - Check for NPC inventory needing emptying
     # Check if farmer needs to add to the chest, and if full add animation
     - if <npc.inventory.quantity_item> > 32:
 
-        - ~run helper_deliver_task
+        - ~run helpers_deliver_task
         # If after transfering items the farm still does not have an empty slow then we assume they are full
         # and the chest is full. Since tasks do NOT return (easily) a value this seems the fastest way
         - if <npc.inventory.empty_slots> == 0:
@@ -210,7 +210,7 @@ helper_ai_task:
           - stop
 
     - if <npc.inventory.contains_item[<[tool_required]>].not>:
-      - run helper_scrolling_nametag def:need_item
+      - run helpers_scrolling_nametag def:need_item
       - stop
 
 
@@ -219,7 +219,7 @@ helper_ai_task:
     # Tracks if the NPC should be forced towalk during idle, useful to try and get unstuck from harvesting
     - define force_walk false
 
-    - run helper_scrolling_nametag def:working
+    - run helpers_scrolling_nametag def:working
     - if <npc.inventory.contains_item[<[tool_required]>]>:
       # TIP: We cannot easily prefilter since different crops have different maximum mages, so we scan it ...
       # .within[<[search_radius]>].filter_tag[<[filter_value].material.age.is[or_more].than[<[crop_max_age]>]>]>
@@ -235,11 +235,11 @@ helper_ai_task:
 
             - if <[crop].material.age.is[or_more].than[<[crop].material.maximum_age>]>:
               # This complex mantra call as task, waits for it to finish and then sees if it was cancled (errored)
-              - define near_crop <proc[helper_find_safe_loc].context[<npc.location>|<[crop]>]>
+              - define near_crop <proc[helpers_find_safe_loc].context[<npc.location>|<[crop]>]>
 
               - define sid myscript_<util.current_tick>
               # WARNING: THis method can CHANGE destination due to path blocked. So let it handle any anomolies
-              - ~run helper_walk_to def:<[crop]> save:<[sid]>
+              - ~run helpers_walk_to def:<[crop]> save:<[sid]>
               - define results <proc[queue_parse].context[<entry[<[sid]>].created_queue.determination||list[]>]>
               - if <[results].get[cancelled]||false>:
                   # Stop scanning, it gets expensive, just let it try again next opertunity
@@ -289,7 +289,7 @@ helper_ai_task:
 
     - if <[harvested].not>:
         # Wander a bit between harvesting
-        - run helper_wander_task instantly
+        - run helpers_wander_task instantly
 
     # Run each NPC in it's own queue
     # NOTE: AVOID WHILE Loops or any long lived loop as the script here can be tied to the NPC
@@ -299,11 +299,11 @@ helper_ai_task:
 
 
 # - Delivery items from NPC to chest
-helper_deliver_task:
+helpers_deliver_task:
   type: task
   debug: false
   script:
-    - run helper_scrolling_nametag def:unloading
+    - run helpers_scrolling_nametag def:unloading
 
     - define chest_loc <npc.flag[chest_loc]||null>
     - define look_target <[chest_loc].add[0,0,0]>
@@ -313,7 +313,7 @@ helper_deliver_task:
     - define chest <[chest_loc].inventory>
 
     # Skip air andtool match, unload all the rest
-    - define ignore <proc[helper_config_for_npc].context[tool_match]>
+    - define ignore <proc[helpers_config_for_npc].context[tool_match]>
     - define ingnore:->:air
     - define items <npc.inventory.list_contents.filter_tag[<[filter_value].material.name.advanced_matches[<[ignore]>].not>]>
     - foreach <[items]> as:item:
@@ -333,7 +333,7 @@ helper_deliver_task:
 
 
 # - Famer wanders a bit randomly, turning head looking around and occasionally walking. Simplistic but works
-helper_wander_task:
+helpers_wander_task:
   type: task
   debug: false
   definitions: force_walk
@@ -352,86 +352,21 @@ helper_wander_task:
     #   In any case do NOT check for sucess on walking, it is not worth it and could result in very long delays
     #   Caller uses to to just look busy OR to help get unstuck, and will just try again if needed
     - if <[force_walk]> or <util.random_chance[15]>:
-      - ~run helper_walk_to def:<[wander_loc]>
-
-
-# - Give an origin identify boundries of a farm based on PLANTED crops
-# - of any mix.
-helper_get_working_area:
-  type: procedure
-  debug: false
-  definitions: origin
-  script:
-    # Relative cordinates for each axis
-    - define world <[origin].world.name>
-    - define north <proc[helper_scanto_edge].context[<[origin]>|<location[0,0,-1]>]>
-    - define south <proc[helper_scanto_edge].context[<[origin]>|<location[0,0,1]>]>
-    - define west <proc[helper_scanto_edge].context[<[origin]>|<location[-1,0,0]>]>
-    - define east <proc[helper_scanto_edge].context[<[origin]>|<location[1,0,0]>]>
-
-    #- debug log "<red>N: <[north]>, S: <[south]>, W: <[west]>, E: <[east]> -- <[origin]>"
-
-    - define corner1 <location[<[west].x>,<[origin].y.sub[0]>,<[south].z>,<[world]>]>
-    - define corner2 <location[<[east].x>,<[origin].y.add[0]>,<[north].z>,<[world]>]>
-
-    - define farm_area <[corner1].to_cuboid[<[corner2]>]>
-    #- debug log "<red>Cuboid Farm: <[farm_area]>"
-    - determine <[farm_area]>
-
-
-# - Scan a direction, specified by an relative cordinate (0,0,1) as delta
-# - When encountering an invalid crop block stop and return prior value
-helper_scanto_edge:
-  type: procedure
-  debug: false
-  definitions: origin|delta
-  script:
-    #- debug log "<green>FIND BOUNDS: <[origin]> ----- <[delta]>"
-
-    - define max_radius <proc[pl__config].context[helpers.professions.farmer.farm_radius_max]>
-    - define valid_blocks <proc[pl__config].context[helpers.professions.farmer.valid_farm.blocks]>
-    - define y_delta <proc[pl__config].context[helpers.professions.farmer.valid_farm.y_offset]>
-    - define max_radius <proc[pl__config].context[helpers.professions.farmer.farm_radius_max]>
-
-    # Add composter, we ignore thse
-    - define valid_farm:->:composter
-
-    # The farm delta is applied just once
-    - define scan_loc <[origin]>
-    - define found_loc <[origin]>
-
-    - repeat <[max_radius]> as:step:
-      # The scan increments by delta for each pass
-      - define scan_loc <[scan_loc].add[<[delta]>]>
-      - define mat_loc <[scan_loc].add[0,<[y_delta]>,0]>
-      - define mat <[mat_loc].material.name>
-      - if <[valid_blocks].contains[<[mat]>].not>:
-          # Water level is always one block below farm base
-          - define water_level <[scan_loc].sub[0,1,0]>
-          #- debug log "<red>Chect water: <[water_level]> --- <[scan_loc]> -- <[water_level].material.name>"
-          # Water like blocks are ALLWOED so if not a water block (and not a valid mat per above) we found an invalid block
-          # Probably faster than checking if it can or cannot be waterlogged.
-          - if <[water_level].material.name> != water and <[water_level].material.waterlogged.if_null[false].not>:
-            - determine <[found_loc]>
-      # A valid block was found so add to the list
-      - define found_loc <[scan_loc]>
-
-    # Reached maximum distance
-    - determine <[found_loc]>
+      - ~run helpers_walk_to def:<[wander_loc]>
 
 
 # - NPC follows leash
-helper_npc_follow:
+helpers_npc_follow:
   type: task
   debug: false
   script:
-  - define leashed <npc.flag[leashed]||null>
-  - if <[leashed]> == null or <npc.owner.is_online.not> or <npc.owner.item_in_hand.material.name> != lead or <npc.owner.is_sneaking>:
+  - define is_following <npc.flag[is_following]||null>
+  - if <[is_following]> == null or <npc.owner.is_online.not> or <npc.owner.item_in_hand.material.name> != lead or <npc.owner.is_sneaking>:
     - narrate "<green>Following canceled"
-    - flag <npc> leashed:!
+    - flag <npc> is_following:!
     - stop
 
-  - run helper_scrolling_nametag def:following
+  - run helpers_scrolling_nametag def:following
 
   - if <npc.location.distance[<npc.owner.location>].is[or_more].to[2]>:
     - walk <npc> <npc.owner.location> auto_range speed:1
@@ -447,7 +382,7 @@ helper_npc_follow:
 #   - Checks if taget was reached within 2 or so, issues a cancel if not.
 #     - caller can monitor this with some effort
 #     - Recomended: Just ignore and continue on assuming caller uses a relative random target location, usually clears up very quickly
-helper_walk_to:
+helpers_walk_to:
   type: task
   debug: false
   definitions: location
@@ -466,7 +401,7 @@ helper_walk_to:
     # FInd location to walk to
     - define location <[location].block.add[.5,0,.5]>
     - if <[location].is_passable.not>:
-      - define location <proc[helper_find_safe_loc].context[<npc.location>|<[location]>]>
+      - define location <proc[helpers_find_safe_loc].context[<npc.location>|<[location]>]>
 
     - ~walk <npc> <[location]> speed:1 auto_range
     #- debug log "<yellow>FROM: <[debug_start]> TO <green> <[location]>"
@@ -479,7 +414,7 @@ helper_walk_to:
 # - Find a block next to the target that is walkable. Often used to walk UP tot he crop/harvestable entity but not onto it
 # - to help avoid pathing issues and be suiatble for lumberjacks, miners, havesting cocoa and vines
 # - targets CENTER of block (target) to reduce edge issues with walking path
-helper_find_safe_loc:
+helpers_find_safe_loc:
   type: procedure
   debug: false
   definitions: source|target
@@ -520,7 +455,7 @@ helper_find_safe_loc:
 # -
 # - status : Name of message action, see configuration file. If nothing is passed then the prior state
 # - is maintained. Use this to update scrolling messages/emotion animations when in loops without a know state
-helper_scrolling_nametag:
+helpers_scrolling_nametag:
   type: task
   debug: false
   definitions: status
@@ -543,8 +478,8 @@ helper_scrolling_nametag:
     - define message_sequence <npc.flag[message.seq]||1>
     - define emotion_timer <npc.flag[emotion.timer]||0>
 
-    - define messages <proc[pl__config].context[helpers.professions.farmer.status.<[status]>.messages]>
-    - define emotion <proc[pl__config].context[helpers.professions.farmer.status.<[status]>.emotion]>
+    - define messages <proc[helpers_config_for_npc].context[status.<[status]>.messages]>
+    - define emotion <proc[helpers_config_for_npc].context[status.<[status]>.emotion]>
 
     - if <[messages]>:
       - if <[current_tick].sub[<[message_timer]>]> > 40:
@@ -602,14 +537,14 @@ helpers_valid_crops:
   type: procedure
   debug: false
   script:
-    - determine <proc[pl__config].context[helpers.professions.farmer.crops].keys>
+    - determine <proc[helpers_config_for_npc].context[crops].keys>
 
 
 # === Find nearest valid NPC structure of any profession
 # === TODO: This is sub-optimal, a better way is to find all trigger blocks, then loop through those, but that is more work and this shoudl be plenty fast enought and easier to maintain
 # = location : Location to initiate search from.
 # = radius : Range around the location to search
-helper_find_nearest_working_area:
+helpers_find_nearest_working_area:
   type: procedure
   debug: false
   definitions: location|radius
@@ -631,52 +566,144 @@ helper_find_nearest_working_area:
     # Upper / lower cuboid
     # Get blcoks that make up the dection matrix for this farm
     - if <[radius]||null> == null:
-      - define radius <proc[pl__config].context[helpers.search_radius]>
+      - define radius <proc[helpers_config].context[search_radius]>
 
     - define farm_search_area_1 <location[<[location].x.sub[<[radius]>]>,<[location].y.sub[1]>,<[location].z.sub[<[radius]>]>,<[location].world>]>
     - define farm_search_area_2 <location[<[location].x.add[<[radius]>]>,<[location].y.add[1]>,<[location].z.add[<[radius]>]>,<[location].world>]>
     - define farm_search_area <[farm_search_area_1].to_cuboid[<[farm_search_area_2]>]>
 
-    # Scan for every type
-    - foreach <proc[pl__config].context[helpers.professions]> as:config key:profession :
-      # Skip any not enabled, if a farm cannot be found then villager conversion to NPC is also disabled
+    # Get a list of all trigger blocks, this prevents double scanning and the confusion that can arise from that
+    - define all_triggers <list[]>
+    - foreach <proc[helpers_config].context[professions]> as:config key:profession :
       - if <[config].get[enabled].if_null[true].not>:
         - foreach next
+      - define all_triggers:->:<[config].deep_get[valid_farm.trigger]>
+    - define all_triggers <[all_triggers].deduplicate>
+    - define found_triggers <[farm_search_area].blocks[<[all_triggers]>]>
 
-      - define valid_chests <[config].deep_get[valid_farm.chest]>
-      - define trigger_block <[config].deep_get[valid_farm.trigger]>
-      - define found_triggers <[farm_search_area].blocks[<[trigger_block]>]>
-      #- debug log "<red>Found: <[trigger_block]> -- <[found_triggers]>"
-
-      - foreach <[found_triggers]> as:base_loc_tmp :
-        #- debug log "<red>Checking Profession: <[profession]> -- <[base_loc_tmp]>"
-
-        # IF a farm was found quickly check if this one is closer
-        - if <[found_farm]> != null:
-          - if <[found_farm].distance[<[location]>]> < <[base_loc_tmp].distance[<[location]>]>:
-            # current potential farm is Further away, ignore it
+    # scan each trigger block in the area against every profession to identiy the nearest proper helper working area
+    - define found_farm false
+    - foreach <[found_triggers]> as:base_loc_tmp :
+        - foreach <proc[helpers_config].context[professions]> as:config key:profession :
+          # Skip any not enabled, if a farm cannot be found then villager conversion to NPC is also disabled
+          - if <[config].get[enabled].if_null[true].not>:
             - foreach next
 
-        # Check validtiy of farm structure
-        - define block_below <[base_loc_tmp].below>
-        #- debug log "<aqua>BELOW: <[block_below]>"
-        - if <[block_below].material.name> == water or <[block_below].material.waterlogged||false>:
-          #- debug log "<red>Found water/logged: <[block_below]>"
-          - define block_below <[block_below].below>
-        - define base_substrate <[config].deep_get[valid_farm.substrate]>
-        #- debug log "<red>Substrate?: <[block_below].material> -- <[base_substrate]>"
-        - if <[block_below].material.name.advanced_matches[<[base_substrate]>]>:
-          #- debug log "<red>Found Substrate: <[base_substrate]>"
-          # See if there is a chest on it
-          - define chest_loc_tmp <[base_loc_tmp].add[0,1,0]>
-          - if <[chest_loc_tmp].material.name.advanced_matches[<[valid_chests]>]>:
-            #- debug log "<red>Found Chest: <[chest_loc_tmp]>"
-            - define found_profession <[profession]>
-            - define found_farm <[base_loc_tmp]>
-            - define found_chest <[chest_loc_tmp]>
-            - define ok true
+          - define valid_chests <[config].deep_get[valid_farm.chest]>
+          - define trigger_block <[config].deep_get[valid_farm.trigger]>
 
-    - determine <map[ok=<[ok]>;profession=<[found_profession]>;farm=<[found_farm]>;chest=<[found_chest]>]>
+          #- debug log "<red>Found Potential farm: <[profession]>"
+
+          # See if this structure matches the curent profession, exit ASAP on mismatch
+          - if <[base_loc_tmp].material.name> == <[trigger_block]>:
+            - if <[found_farm]>:
+              - debug log "<aqua>: <[found_farm].distance[<[location]>]> LT? <[base_loc_tmp].distance[<[location]>]>"
+
+              - if <[found_farm].distance[<[location]>]> <= <[base_loc_tmp].distance[<[location]>]>:
+                # current potential farm is Further away, ignore it
+                #- debug log "<red>Profession farther away: <[profession]> -- <[base_loc_tmp]>"
+                - foreach next
+
+          #- debug log "<red>Farm is closer checking strcuture: <[profession]> -- <[base_loc_tmp]>"
+
+          # Check validtiy of farm structure
+          - define block_below <[base_loc_tmp].below>
+          #- debug log "<aqua>BELOW: <[block_below]>"
+          - if <[block_below].material.name> == water or <[block_below].material.waterlogged||false>:
+            #- debug log "<red>Found water/logged: <[block_below]>"
+            - define block_below <[block_below].below>
+          - define base_substrate <[config].deep_get[valid_farm.substrate]>
+          #- debug log "<red>Substrate?: <[block_below].material> -- <[base_substrate]>"
+          - if <[block_below].material.name.advanced_matches[<[base_substrate]>]>:
+            #- debug log "<red>Found Substrate: <[base_substrate]>"
+            # See if there is a chest on it
+            - define chest_loc_tmp <[base_loc_tmp].add[0,1,0]>
+            - if <[chest_loc_tmp].material.name.advanced_matches[<[valid_chests]>]>:
+              #- debug log "<red>Found Chest: <[chest_loc_tmp]>"
+              - define found_profession <[profession]>
+              - define found_farm <[base_loc_tmp]>
+              - define found_chest <[chest_loc_tmp]>
+              - define found_config <[config]>
+              - define ok true
+              #- debug log "<red>Farm is valid and closest so far: <[profession]> -- <[base_loc_tmp]>"
+              # Found a farm structure, so this composter is fine (if farms are not defined as unique thins become rather non-detrerminstic)
+              # I dislike this style but it is better than flags
+              - foreach stop
+
+    - if <[ok]>:
+      - define farm_area <proc[helpers_get_working_area].context[<[found_farm]>|<[found_config]>]>
+    - else:
+        - define farm_area null
+
+    - determine <map[ok=<[ok]>;profession=<[found_profession]>;farm=<[found_farm]>;chest=<[found_chest]>;farm_area=<[farm_area]>]>
+
+
+# - Give an origin identify boundries of a farm based on PLANTED crops
+# - of any mix. Designed to be called from `helpers_find_nearest_working_area` and other internal farm maintenance
+# - Requires the origin of the farm AND the current config, which is: professions.<[profession]>.....
+helpers_get_working_area:
+  type: procedure
+  debug: false
+  definitions: origin|config
+  script:
+    # TODO: If config is NOT passed pull config data using server flags associated with the origin
+
+    # Relative cordinates for each axis
+    - define world <[origin].world.name>
+    - define north <proc[helpers_scan_to_edge].context[<[origin]>|<location[0,0,-1]>|<[config]>]>
+    - define south <proc[helpers_scan_to_edge].context[<[origin]>|<location[0,0,1]>|<[config]>]>
+    - define west <proc[helpers_scan_to_edge].context[<[origin]>|<location[-1,0,0]>|<[config]>]>
+    - define east <proc[helpers_scan_to_edge].context[<[origin]>|<location[1,0,0]>|<[config]>]>
+
+    - debug log "<green>N: <[north]>, S: <[south]>, W: <[west]>, E: <[east]> -- <[origin]>"
+
+    - define corner1 <location[<[west].x>,<[origin].y.sub[0]>,<[south].z>,<[world]>]>
+    - define corner2 <location[<[east].x>,<[origin].y.add[0]>,<[north].z>,<[world]>]>
+
+    - define farm_area <[corner1].to_cuboid[<[corner2]>]>
+    - debug log "<green>Cuboid Farm: <[farm_area]>"
+    - determine <[farm_area]>
+
+
+# - Scan a direction, specified by an relative cordinate (0,0,1) as delta
+# - When encountering an invalid crop block stop and return prior value
+helpers_scan_to_edge:
+  type: procedure
+  debug: false
+  definitions: origin|delta|config
+  script:
+    #- debug log "<green>FIND BOUNDS: <[origin]> ----- <[delta]>"
+
+    - define max_radius <[config].get[farm_radius_max]>
+    - define valid_blocks <[config].deep_get[valid_farm.blocks]>
+    - define y_delta <[config].deep_get[valid_farm.y_offset]>
+
+    # Add composter, we ignore thse
+    - define valid_farm:->:composter
+
+    # The farm delta is applied just once
+    - define scan_loc <[origin]>
+    - define found_loc <[origin]>
+
+    - repeat <[max_radius]> as:step:
+      # The scan increments by delta for each pass
+      - define scan_loc <[scan_loc].add[<[delta]>]>
+      - define mat_loc <[scan_loc].add[0,<[y_delta]>,0]>
+      - define mat <[mat_loc].material.name>
+      - if <[valid_blocks].contains[<[mat]>].not>:
+          # Water level is always one block below farm base
+          - define water_level <[scan_loc].sub[0,1,0]>
+          #- debug log "<red>Chect water: <[water_level]> --- <[scan_loc]> -- <[water_level].material.name>"
+          # Water like blocks are ALLWOED so if not a water block (and not a valid mat per above) we found an invalid block
+          # Probably faster than checking if it can or cannot be waterlogged.
+          - if <[water_level].material.name> != water and <[water_level].material.waterlogged.if_null[false].not>:
+            - determine <[found_loc]>
+      # A valid block was found so add to the list
+      - define found_loc <[scan_loc]>
+
+    # Reached maximum distance
+    - determine <[found_loc]>
+
 
 
 # = Highlight base
@@ -704,7 +731,7 @@ helpers_highlight_farm:
 
 
 # = Scan for tool item and if found use it
-helper_pick_up_tool:
+helpers_pick_up_tool:
   type: task
   debug: false
   script:
@@ -716,7 +743,7 @@ helper_pick_up_tool:
     # Expand top and bottom to make it easier to find item sthat might have fallen into water
     # or ot top of something else. It's fast since entity scanning is WAY faster than block scanning
     - define drop_area <[farm_area].expand_one_side[0,-2,0].expand_one_side[0,1,0]>
-    - define tool_matcher <proc[helper_config_for_npc].context[tool_match]>
+    - define tool_matcher <proc[helpers_config_for_npc].context[tool_match]>
 
     # See if Farmer can find a hoe and equip it, once grabbed the hoe
     # is forver the Farmer, by design. A new hoe replaces CURRENT
@@ -737,7 +764,7 @@ helper_pick_up_tool:
       - ~walk <npc> <[tool_loc]> speed:1 auto_range
       # Check hoe near it to make the mesage clearer
       - if <[tool].enchantment_map.is_empty.not>:
-        - run helper_scrolling_nametag def:invalid_item
+        - run helpers_scrolling_nametag def:invalid_item
         - stop
 
       #  NOTE: ignoring race conditions If players want to carefully time things for modest item duplication
@@ -756,13 +783,13 @@ helper_pick_up_tool:
       - animate <npc> animation:SWING_MAIN_HAND
       - equip <npc> hand:<[tool]>
       - remove <[entity]>
-      - run helper_scrolling_nametag def:thank_you
+      - run helpers_scrolling_nametag def:thank_you
 
 
 # == Convert a villager to an NPC
 # - Profession is the helper profession and must be passed. Sometime this helper plugin may have a profession
 # - that MC does not
-helper_npc_spawn:
+helpers_npc_spawn:
   type: task
   debug: false
   definitions: villager|owner|profession
@@ -777,7 +804,7 @@ helper_npc_spawn:
 
     # Dress NPC basd on configuration file
     # - ...uniform.hat.type, .color
-    - define uniform <proc[pl__config].context[helpers.professions.<[profession]>.uniform]||null>
+    - define uniform <proc[helpers_config].context[professions.<[profession]>.uniform]||null>
     - if <[uniform]>:
       - foreach <[uniform]> as:style key:item_type :
         - define item <item[<[style].get[type]>]>
@@ -801,18 +828,20 @@ helper_npc_spawn:
     - pushable <[new_npc]>:true
     - adjust <[new_npc]> collidable:true
 
-    - assignment set script:helper_brain to:<[new_npc]>
+    - assignment set script:helpers_brain to:<[new_npc]>
 
 # = Fetch the NPC configuration path
 # - Uses current NPC
-helper_config_for_npc:
+helpers_config_for_npc:
   type: procedure
   definitions: path
   debug: false
   script:
-  - determine <proc[pl__config].context[helpers.professions.<npc.flag[profession]>.<[path]>]>
+  - debug log "<green>path: <[path]>"
+  - define profession <npc.flag[profession]>
+  - determine <proc[pl__config].context[helpers.professions.<[profession]>.<[path]>]>
 
-helper_config:
+helpers_config:
   type: procedure
   definitions: path
   debug: false
