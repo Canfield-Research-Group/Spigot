@@ -19,14 +19,19 @@
 # - TODO: Villager to Famer logic
 #
 # TODO:
-#   - detect a villager touching beocming a farmer and if composter has a frame with a hoe remove and change to NPC Farmer
-#     - See if we can keep villagers clothing
-#     - See conmfig file farmer for proposed block pattern
-#   - range : scan for a plantable block types (a whitelist) around composter
-#           - NSEW
-#           - Upon finding first non plantable NON water STOP
-#           - Create a cuboid of this area
-#
+# - move farm working flags to NPC
+#   - KEY is server.helpers_LOC.
+#     - area : Farm area
+#     - profession : Farm profression (key in config)
+#     - npc_attached : LIST of all NPCs IDs attached to farm (not sure we will use this or not)
+#     - chest : Chets location for this farm
+#   - NPC now get (some duplicate just for performance)
+#     - farm_loc : The trigger block and thus the key to the flag (prefixed)
+#       - proc: helpers_set_farm(loc)
+#       - proc: helpers_npc_get(path) relative to profession related to farm_loc
+#     - profession (this is reset on any loosing and then regaining a farm, but NPC retains this even if farm is broke so keep it)
+
+
 
 # MOSTLY for admins, reset flag when farmer respawns
 helpers_villager:
@@ -127,6 +132,7 @@ helpers_ai_task:
   type: task
   debug: false
   script:
+    - stop
     # Used to close out any running controllers, usually called by assignment
     - if <server.has_flag[helpers_reset]>:
       - stop
@@ -632,6 +638,8 @@ helpers_find_nearest_working_area:
 
     - if <[ok]>:
       - define farm_area <proc[helpers_get_working_area].context[<[found_farm]>|<[found_config]>]>
+      # Save this configruation
+
     - else:
         - define farm_area null
 
@@ -837,7 +845,6 @@ helpers_config_for_npc:
   definitions: path
   debug: false
   script:
-  - debug log "<green>path: <[path]>"
   - define profession <npc.flag[profession]>
   - determine <proc[pl__config].context[helpers.professions.<[profession]>.<[path]>]>
 
@@ -847,3 +854,60 @@ helpers_config:
   debug: false
   script:
   - determine <proc[pl__config].context[helpers.<[path]>]||null>
+
+
+# === Access global farm data. Uses location and a dot seperated path (map) to access Farm data
+# - location (an object) of the farm location (composter, etc.) to fetch data for. This results in a MAP
+#   - A full location key can be passed, such as from `helpers_farms_flag_all`
+# - path (optional) uses deep_get to process traverse the MAP. If not present  (or false) returns the entire location data (relatively small)
+# - Returns data found (or whatever type was stored) OR null for not found
+helpers_farm_flag_get:
+  type: procedure
+  definitions: location|path
+  debug: false
+  script:
+    - define data null
+    - if <[location]||false>:
+        - if <[location].starts_with[helpers_farms_]>:
+          - define loc_key <[location]>
+        - else:
+          - define loc_key helpers_farms_<[location].simple>
+        - define data <server.flag[<[loc_key]>].if_null[<map[]>]>
+        - if <[path]||false>:
+          - define data <[data].deep_get[<[path]>]||null>
+    - determine <[data]>
+
+
+helpers_farm_flag_set:
+  type: procedure
+  definitions: location|path|value
+  debug: false
+  script:
+    - define data null
+    - if <[location]||false>:
+        - if <[location].starts_with[helpers_farms_]>:
+          - define loc_key <[location]>
+        - else:
+          - define loc_key helpers_farms_<[location].simple>
+
+
+        - if <[path]||false>:
+          # Fetch data
+          - define data <server.flag[<[loc_key]>].if_null[<map[]>]>
+          - define data <[data].deep_with[<[path]>].as[<[value]>]>
+        - else:
+          # Update the ENTIRE KEY
+          - flag server <[loc_key]>:<[value]>
+
+    - determine <[value]>
+
+
+# - returns a list of all helpers_farms_ keys. Suitable fo helpers_farm_flag
+helpers_farm_flag_all:
+  type: procedure
+  debug: false
+  script:
+    - determine <server.list_flags.filter_tag[<[filter_value].starts_with[helpers_farms_]>]>
+
+
+
