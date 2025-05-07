@@ -64,18 +64,25 @@ feeder_loop_starter:
     # to move 1 stack every X per feeder but the feeders are also on a tick boundry. There is a lot
     # of effort to prevent lagging out the server so lets fire every tick and see how horrible it is
     # using the spark plugin (which I usually load on my servers for just this purpose)
-    #   TODO: The other way is to have the feeder loop actually loop continuusly, refreshing its
-    #   lock and this taks just handles cases of restart. That would be mor eperformant if the actual
-    #   capture on this event is what is the problem.
-    on delta time secondly every:5:
+    # lock and this taks just handles cases of restart. That would be mor eperformant if the actual
+    # capture on this event is what is the problem.
+    #  - the loop_feeder is recrsive, this taks exists only to restart it if it fails, only every few seconds
+    on delta time secondly every:5 :
         # THis taks handles it's own locking
-        - run si__loop_feeders instantly
+        - run si__loop_feeders
 
-    # Reet the loop on script reload so it will startup again properly, instead of waiting for flag TTL
+    # Reset the loop on script reload so it will startup again properly, instead of waiting for flag TTL
     on reload scripts:
-        - flag server si_feeder_loop_active:!
-
-
+        # HACK to clear all queues for emergency diagnostics on restart
+        # THis will may generate warnings reagrging queu clear even through precautions have been taken
+        #   Do NOT run this in production, it breaks lots of things as it is NOT limited to any one script file
+        - if true:
+            - foreach <util.queues> as:q as:
+                - if <[q].is_valid> and <[q].numeric_id> != <queue.numeric_id>:
+                    - debug log "<red>Stop: <[q]>"
+                    # Clear does NOT work until the queue finishes and if it has not yet started I am not sure it fires
+                    # in anycase on reload STOP all running. Be Aware thgis might break things
+                    - queue <[q]> stop
 
 # ***
 # *** Signs/Frames can make clicking on chests very challenging. Adjust the right-click to
@@ -851,45 +858,31 @@ si__loop_feeders:
   script:
     # Prevent recursive runing of this job. If somethign horrible goes
     # wrong with task auto remove flag after 2 seconds.
-    - if <server.has_flag[si_feeder_loop_active]>:
-        - stop
     - if <server.has_flag[si_stop]>:
         - stop
 
-    # SOme overhead to monitor for lag - consider remocing this as it is not ber accurate
-    # but useful in development to see whent hings goe very wrong in case the TPS (Spark) is not running.
-    - define now <util.current_time_millis>
+    # Give a bit of time to close out the task that called us.
+    #    This works better than than using `run ... delay` which adds a queue whcihc an confuse the queue handler
 
-    - flag server si_feeder_loop_active:true duration:2s
-    - run si__process_feeders instantly
-
-    # FInsih out the current tick to free up time
+    # Add a small de-lag 
     - wait 1t
 
-    - flag server si__debug:<[now]>
 
-    # Disable lag output, it is a bit noisy and not accurate, especially if Denizen or script triggers waits
-    - if 0:
-        - define prior <server.flag[si__debug].if_null[<[now]>]>
-        - define elapsed <[now].sub[<[prior]>]>
-        # SInce this fires every tick and feeder loop takes less than a tick the expected
-        # max is 20ms -- more than that we have a problem
-        - if <[elapsed]> > 50:
-            - debug log "<red>LAGGING exceeds (1t - 50ms): <[elapsed]>"
+    # One of the simplest ways to make it so only 1 queue (or actually x) queues for a task are runing.
+    # Filter, get count, exit current one if count is reached. This stops timed events, watchdogs or
+    # rogue calls from occuring. Simple clean.
+    #   THis does nto stop any backgroudn queues so those continue to runt o completion
+    - define queues <script.queues.filter_tag[<[filter_value].id.starts_with[SI__LOOP_FEEDERS_]>]>
+    - if <[queues].size> != 1:
+        #- debug log "<red>Stopping queue <queue.numeric_id> there are too many others running: <[queues].size>"
+        - stop
 
-    # Let script run on next tick  - this avoids us having to add a wait here.
-    # If desired add a wait before clearing flag to avoid the 'delta event' we have running to keep this alive on reloads and such
-    #   Use a wait 20t (1 second) to slow things down for debugging if desired, which will also cause the lag event to fire
-    #   which is rather convient to help log things
-    #- wait 20t
+    # Tip: '~run ' is waitable. And per testing, the run will WAIT until the task is done
+    #   See: https://meta.denizenscript.com/Docs/Search/run#run
+    #   See: https://meta.denizenscript.com/Docs/Languages/~waitable
+    - ~run si__process_feeders
 
-    # Disbale active so next iteration runs. If something else starts the loop between disabling flag and
-    # executing the task, that's fine (only one instance of loop is allowed)
-    #   = NOTE: it would seem a 'repeat BIGINT:' would be better than this call but apparently the call
-    #   = reuses the same queue, and gives the denzien engine the opertunity to do GC and other operations. So
-    #   = is recomended for long term stability. This mechanism is also more effecient than a fast 'tick every'
-    #   = event, as those do have to create quesu, clear queus, which while quick is still a load.
-    - flag server si_feeder_loop_active:!
+    # Setup to run on next tick to reduce lag
     - run si__loop_feeders
 
 
@@ -938,7 +931,6 @@ si__process_feeders:
     #  then there is and should notbe a diag message. SO we need to preserve it
     #  Note: It is faster to do this than havea GC to remove old unused log entries
     - define diag_log <server.flag[si_diag].if_null[<map[]>]>
-    #- define diag_log <map[]>
 
     # Loop on each world and limit processing per world
     - foreach <[all_worlds]> as:world:
@@ -1270,7 +1262,6 @@ si__process_feeders:
                 - define move_completed true
 
     # Record all logs for player for use in player diagnostics
-    #- debug log "<green>Feeder Log: <[diag_log]>"
     - flag server si_diag:<[diag_log]>
 
 
