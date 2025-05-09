@@ -76,8 +76,8 @@ feeder_loop_starter:
         # HACK to clear all queues for emergency diagnostics on restart
         # THis will may generate warnings reagrging queu clear even through precautions have been taken
         #   Do NOT run this in production, it breaks lots of things as it is NOT limited to any one script file
-        - if true:
-            - foreach <util.queues> as:q as:
+        - if false:
+            - foreach <util.queues> as:q :
                 - if <[q].is_valid> and <[q].numeric_id> != <queue.numeric_id>:
                     - debug log "<red>Stop: <[q]>"
                     # Clear does NOT work until the queue finishes and if it has not yet started I am not sure it fires
@@ -873,7 +873,7 @@ si__loop_feeders:
     # rogue calls from occuring. Simple clean.
     #   THis does nto stop any backgroudn queues so those continue to runt o completion
     - define queues <script.queues.filter_tag[<[filter_value].id.starts_with[SI__LOOP_FEEDERS_]>]>
-    - if <[queues].size> != 1:
+    - if <[queues].size> > 1:
         #- debug log "<red>Stopping queue <queue.numeric_id> there are too many others running: <[queues].size>"
         - stop
 
