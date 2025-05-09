@@ -112,30 +112,43 @@ helpers_ai_controller:
   type: task
   debug: false
   script:
+
     # If despawned stop script
     - if <npc.is_spawned.not>:
       - stop
 
-    - define wait_time  <proc[helpers_config_for_npc].context[wait_time]>
+
+    # FIlter QUEUE to THIS NPC and if more than one stop the current being attempted (see simple-inventory for why this works)
+    # - be sure to wait 1 tick for calling QUEUE to end otherwise we will the recustive one
+    - wait 1t
+    - define queues <script.queues.filter_tag[<[filter_value].id.starts_with[helpers_ai_controller_].and[<[filter_value].npc.equals[<npc>].if_null[false]>]>]>
+    - if <[queues].size> > 1:
+      - debug log "<red>Stopping queue <queue.numeric_id> there are too many others running: <[queues].size>"
+      - stop
 
     - define queue_id helpers_ai_task<npc.id>
     - define sid myscript_<util.current_tick>
     - ~run helpers_ai_task id:<[queue_id]> save:<[sid]>
     - define results <proc[queue_parse].context[<entry[<[sid]>].created_queue.determination||list[]>]>
+
+    - define wait_time  <proc[helpers_config_for_npc].context[wait_time]>
     - define delay <[results].get[delay]||<[wait_time]>>
-    #- debug log "<aqua><util.queues>"
+    - wait <[delay]>
+
     # Recycle to keep brain controler alive
-    - run helpers_ai_controller id:helpers_ai_controller<npc.id> delay:<[delay]>
+    - run helpers_ai_controller
 
 
 helpers_ai_task:
   type: task
   debug: false
   script:
-    - stop
+    #- stop
     # Used to close out any running controllers, usually called by assignment
     - if <server.has_flag[helpers_reset]>:
       - stop
+
+    - debug log "<gold> Helpers AI task for: <npc>"
 
     # Valid chests
     - define valid_chests <proc[helpers_config_for_npc].context[valid_farm.chest]>
@@ -320,13 +333,14 @@ helpers_deliver_task:
 
     # Skip air andtool match, unload all the rest
     - define ignore <proc[helpers_config_for_npc].context[tool_match]>
-    - define ingnore:->:air
     - define items <npc.inventory.list_contents.filter_tag[<[filter_value].material.name.advanced_matches[<[ignore]>].not>]>
     - foreach <[items]> as:item:
       # Simpel quick check for space available, if not then just stop
-      - define space_available <[chest].can_fit[<[item]>]>
-      - if <[space_available].not>:
-        - stop
+      # Also check for air as lat as possible to avoid race conditions
+      - if <[item].material.name> != air:
+        - define space_available <[chest].can_fit[<[item]>]>
+        - if <[space_available].not>:
+          - stop
 
       # Inventory sucks -- to avoid ghost items we move by name, it's easier but cannot reliable move
       # special items. Which we do not have.
@@ -802,13 +816,16 @@ helpers_npc_spawn:
   debug: false
   definitions: villager|owner|profession
   script:
-    - define debug "<gold>NPC Spawn Logic"
     - define location <[villager].location>
     - create player Helper<[profession]> <[location]> save:npc_new
     - define new_npc <entry[npc_new].created_npc>
     - adjust <[new_npc]> owner:<[owner]>
     # remove villager
     - remove <[villager]>
+
+    # Set attributes for this NPC
+    - flag <[new_npc]> profession:<[profession]>
+
 
     # Dress NPC basd on configuration file
     # - ...uniform.hat.type, .color
@@ -833,7 +850,7 @@ helpers_npc_spawn:
       - debug log "<red>Villager at <[location]> cannot find uniform for <[profession]>"
 
     - adjust <[new_npc]> set_protected:false
-    - pushable <[new_npc]>:true
+    - pushable npc:<[new_npc]> state:true
     - adjust <[new_npc]> collidable:true
 
     - assignment set script:helpers_brain to:<[new_npc]>
