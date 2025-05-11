@@ -115,12 +115,16 @@ powerlevel_blocks:
 # *** should_run_this_tick
 # *** Returns true if the current server tick matches this location's tick group.
 # ***
+# *** NOTE: This uses millis as that is more random than ticks (with are every 50ms)
+# ***
 # *** Spreads work across ticks by hashing the X/Y/Z of a LocationTag and comparing
 # *** the result against the current tick modulo group size.
 # ***
 # *** PARAMETERS:
 # *** location     - A LocationTag (must include world)
 # *** group_size   - Number of ticks over which to spread processing (e.g., 8)
+# *** current_tick - Pass a current tick (suaully an incrementing value tracked via a flag). This is the most fair
+# ***               since wait operastions tend to allign on ms boundries there is a tendency to have mod to result in non-random distribution
 # ***
 # *** RETURNS:
 # *** true or false (Boolean) — true if this tick is the correct one for this location
@@ -131,7 +135,7 @@ powerlevel_blocks:
 # ***
 should_run_this_tick:
   type: procedure
-  definitions: location|group_size|debug
+  definitions: location|group_size|current_tick
   debug: false
   script:
     - define x <[location].x.round>
@@ -139,7 +143,8 @@ should_run_this_tick:
     - define z <[location].z.round>
     - define hash <[x].mul[31].add[<[y].mul[13]>].add[<[z].mul[7]>].abs>
     - define tick_group <[hash].mod[<[group_size]>]>
-    - determine <[tick_group].is[==].to[<util.current_tick.mod[<[group_size]>]>]>
+    - define current_tick <[current_tick]||<util.current_time_millis>>
+    - determine <[tick_group].is[==].to[<[current_tick].mod[<[group_size]>]>]>
 
 # ***
 # *** Given a radius in blocks of a cubid calculate a spherical radius
