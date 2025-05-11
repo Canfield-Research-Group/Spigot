@@ -4,16 +4,41 @@
 #   - Used by tmux or other systems to JUST start the server
 
 # With 8 GB in the machine, 6 GB had MC run out of RAM, so try 4 and see if server handles that
-memoryGB=4
-#memoryGB=8
+# 2025-05-11 : 4 to 6.5 based on https://docs.papermc.io/paper/aikars-flags/
+#  - Switch to MB for more resolution
+#memoryMB=4096
+memoryLimit=6500M
 
 # See also https://paper.readthedocs.io/en/latest/server/aikar-flags.html
 # Download latest - only takes a second or so
-export getLatest=1.21.4
+# 2025-04-29 : Updated to 1.21.5 as a test and for Citizens
+export getLatest=1.21.5
 if [[ -n "$getLatest" ]]; then
   curl -o purpurmc.jar https://api.purpurmc.org/v2/purpur/${getLatest}/latest/download
 fi
 
+
+
+
+# Usie new modern ZGC (Java 21) 2025-05-09
+#  - openjdk 21.0.6 2025-01-21 LTS
+java \
+-Xms${memoryLimit} -Xmx${memoryLimit} \
+-XX:+UseZGC \
+-XX:+AlwaysPreTouch \
+-XX:+DisableExplicitGC \
+-XX:+AlwaysPreTouch \
+-XX:+PerfDisableSharedMem \
+-XX:-ZUncommit \
+-XX:+UseStringDeduplication \
+-XX:+ParallelRefProcEnabled \
+-jar purpurmc.jar nogui
+
+exit 0
+
+
+# *** DEPRECATDED
+# OLDER Aikar's G1GC flags for a MUCH older Jaba
 
 # Set RAM to max minus 1 GB (the OS does not need that much bue play it safe for maintenance)
 # - NOTE: Even through the server dhows free mem of 7.6 GB a 7 GB limit seems to fail due to RAM
