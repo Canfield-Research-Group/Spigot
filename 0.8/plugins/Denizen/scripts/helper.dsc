@@ -50,7 +50,16 @@ helpers_villager:
       - define player <[players].get[1]||null>
       - if <[player]>:
         - define search_radius <proc[helpers_config].context[search_radius]>
+
+
+        - define sid helpers_village_<util.current_time_millis>
+        - ~run helpers_find_nearest_working_area save:<[sid]>
+        - define results <proc[queue_parse].context[<entry[<[sid]>].created_queue.determination||list[]>]>
+
+
         - define result <proc[helpers_find_nearest_working_area].context[<context.entity.location>|<[search_radius]>]>
+        - run helpers_find_nearest_working_area def.locaiton: <context.entity.location> def.search_radius:<[search_radius]>
+        - define farm_data <proc[]>
         - if <[result].get[ok]>:
           - debug log "<green><[result].get[profession]> Helper found at <[villager].location>, near player (<[player].name>) and near farm (<[result].get[farm]>)"
           - ~run helpers_npc_spawn def:<[villager]>|<[player]>|<[result].get[profession]>
@@ -112,11 +121,9 @@ helpers_ai_controller:
   type: task
   debug: false
   script:
-
     # If despawned stop script
     - if <npc.is_spawned.not>:
       - stop
-
 
     # FIlter QUEUE to THIS NPC and if more than one stop the current being attempted (see simple-inventory for why this works)
     # - be sure to wait 1 tick for calling QUEUE to end otherwise we will the recustive one
@@ -143,12 +150,9 @@ helpers_ai_task:
   type: task
   debug: false
   script:
-    #- stop
     # Used to close out any running controllers, usually called by assignment
     - if <server.has_flag[helpers_reset]>:
       - stop
-
-    - debug log "<gold> Helpers AI task for: <npc>"
 
     # Valid chests
     - define valid_chests <proc[helpers_config_for_npc].context[valid_farm.chest]>
@@ -552,20 +556,13 @@ helpers_scrolling_nametag:
           # - All others do no effects, this includes OK
 
 
-# = Get a list of valid crops
-helpers_valid_crops:
-  type: procedure
-  debug: false
-  script:
-    - determine <proc[helpers_config_for_npc].context[crops].keys>
-
 
 # === Find nearest valid NPC structure of any profession
 # === TODO: This is sub-optimal, a better way is to find all trigger blocks, then loop through those, but that is more work and this shoudl be plenty fast enought and easier to maintain
 # = location : Location to initiate search from.
 # = radius : Range around the location to search
 helpers_find_nearest_working_area:
-  type: procedure
+  type: task
   debug: false
   definitions: location|radius
   script:
@@ -650,14 +647,35 @@ helpers_find_nearest_working_area:
               # I dislike this style but it is better than flags
               - foreach stop
 
+    - define flag_path helpers_farms_<[location].simple>
     - if <[ok]>:
       - define farm_area <proc[helpers_get_working_area].context[<[found_farm]>|<[found_config]>]>
-      # Save this configruation
+      # Save this configruation to farm location
+      - define data <map[farm=<[found_farm]>; farm_area=<[farm_area]>;chest=<[found_chest]>;profession=<[profession]>]>
+      - flag server <[flag_path]>:<[data]>
+      #- run helpers_farm_flag_set def.location:<[found_farm]> def.value:<map[farm=<[found_farm]>; farm_area=<[farm_area]>;chest=<[found_chest]>;profession=<[profession]>]>
 
     - else:
-        - define farm_area null
+        - if  <server.has_flag[<[flag_path]>]>:
+          - flag server <[flag_path]>:!
 
-    - determine <map[ok=<[ok]>;profession=<[found_profession]>;farm=<[found_farm]>;chest=<[found_chest]>;farm_area=<[farm_area]>]>
+    #- determine <map[ok=<[ok]>;profession=<[found_profession]>;farm=<[found_farm]>;chest=<[found_chest]>;farm_area=<[farm_area]>]>
+
+
+# = Get farm data for location, returns array of data OR FALSE if location lacks a farm
+# - requires a call to helpers_find_nearest_working_area() for the location
+helpers_get_farm_at:
+  type: procedure
+  debug: false
+  definitions: location
+  script:
+    - define flag_path helpers_farms_<[location].simple>
+    - if  <server.has_flag[<[flag_path]>]>:
+      - determine <server.flag[<[flag_path]>]>
+    - else:
+      - determine false
+
+
 
 
 # - Give an origin identify boundries of a farm based on PLANTED crops
@@ -865,6 +883,7 @@ helpers_config_for_npc:
   - define profession <npc.flag[profession]>
   - determine <proc[pl__config].context[helpers.professions.<[profession]>.<[path]>]>
 
+
 helpers_config:
   type: procedure
   definitions: path
@@ -895,8 +914,9 @@ helpers_farm_flag_get:
     - determine <[data]>
 
 
+# A task, setting is not allowed for procedures
 helpers_farm_flag_set:
-  type: procedure
+  type: task
   definitions: location|path|value
   debug: false
   script:
