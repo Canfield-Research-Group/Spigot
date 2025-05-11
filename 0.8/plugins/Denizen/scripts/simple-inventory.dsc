@@ -864,8 +864,8 @@ si__loop_feeders:
     # Give a bit of time to close out the task that called us.
     #    This works better than than using `run ... delay` which adds a queue whcihc an confuse the queue handler
 
-    # Add a small de-lag 
-    - wait 1t
+    # Add a small de-lag
+    - wait 2t
 
 
     # One of the simplest ways to make it so only 1 queue (or actually x) queues for a task are runing.
@@ -880,6 +880,7 @@ si__loop_feeders:
     # Tip: '~run ' is waitable. And per testing, the run will WAIT until the task is done
     #   See: https://meta.denizenscript.com/Docs/Search/run#run
     #   See: https://meta.denizenscript.com/Docs/Languages/~waitable
+    - define s_time <util.current_time_millis>
     - ~run si__process_feeders
 
     # Setup to run on next tick to reduce lag
@@ -900,7 +901,6 @@ si__process_feeders:
   definitions: tick_delay|filter_player
   script:
     - define counter 0
-
     - define elapsed_chunk_loaded 0
     - define elapsed_inv 0
     - define elapsed_distance 0
@@ -933,6 +933,9 @@ si__process_feeders:
     - define diag_log <server.flag[si_diag].if_null[<map[]>]>
 
     # Loop on each world and limit processing per world
+    - define current_feeder_sequence <server.flag[si.feeder_sequence]||-1>
+    - define current_feeder_sequence:++
+    - flag server si.feeder_sequence:<[current_feeder_sequence]> expire:10s
     - foreach <[all_worlds]> as:world:
         - define world_name <[world].name>
         - define feeder_master_list <list[]>
@@ -950,15 +953,18 @@ si__process_feeders:
 
             # Get all feeders for for this player/world
             - define feeders <[owner].flag[si.<[world_name]>.feeder].if_null[<list[]>]>
-            # Add each of these to the master list
+            - if <[feeders].size> == 0:
+                # No feeders for this world so just continue
+                - foreach next
+
             - foreach <[feeders]> as:feeder :
-                # A bit of a hack to add particales for anY JAM
+                # A bit of a hack to add particales for any JAM
                 - define feeder_loc <[feeder].get[t].block>
 
                 # ONly add feeders that are applicable to the current tick
-                - if <proc[should_run_this_tick].context[<[feeder_loc]>|<[feeder_tick_delay]>]>:
+                - if <proc[should_run_this_tick].context[<[feeder_loc]>|<[feeder_tick_delay]>|<[current_feeder_sequence]>]>:
                     - define feeder_master_list:->:<list[<[owner]>|<[feeder]>]>
-                    # Particales only occur if NTO quiet
+                    # Particales only occur if NOT quiet
                     - if !<[feeder].get[q].if_null[0]>:
                         - define diag_key <[owner].name>.<[world_name]>.<[feeder].get[t].block>
                         - define log <[diag_log].deep_get[<[diag_key]>]||element[]>
@@ -977,7 +983,6 @@ si__process_feeders:
 
             # Randomize this list for fairness
             - define feeder_master_list <[feeder_master_list].random[<[feeder_master_list].size>]>
-
         # Now process the feeder list for this world
         - foreach <[feeder_master_list]> as:feeder_to_process :
             - define owner <[feeder_to_process].get[1]>
@@ -991,44 +996,48 @@ si__process_feeders:
             # When this becomes true the current feeder is DONE
             - define move_completed false
 
-            # Check feeder location (trigger)
-            - define feeder_loc <[feeder].get[t]>
-            - if <[feeder_loc].chunk.is_loaded.not>:
-                - define diag_state "Info: chunk not loaded"
-                - define diag_log <[diag_log].deep_with[<[diag_key]>].as[<[diag_state]>]>
-                - foreach next
-
 
             # Check chest location
+            # o this first as it is quick and easy. Note that inventory is null/empty if chunk is not loaded
             - define feeder_chest <[feeder].get[c]>
-            - if <[feeder_chest].chunk.is_loaded.not>:
-                - define diag_state "Info: chunk not loaded"
-                - define diag_log <[diag_log].deep_with[<[diag_key]>].as[<[diag_state]>]>
-                - foreach next
+            - define feeder_inventory <[feeder_chest].inventory.if_null[null]>
+            - if <[feeder_inventory]> == null:
+                - if <[feeder_chest].chunk.is_loaded>:
+                    # Inventory is NULL AND chunk is loaded so chest is GONE
+                    - debug log "<red>Feeder chest missing: <[feeder_chest]>"
+                    - run si__remove_mapping def:<[owner]>|<[feeder_chest]>|c
+                    - foreach next
+                - else:
+                    - if <[feeder_inventory].is_empty>:
+                        - foreach next
             # Get other feeder chest (double chest), if none just set to self. Makes for faster code as we save multiple ifs later
             - define feeder_chest_other <[feeder_chest].other_block.if_null[<[feeder_chest]>]>
 
+
+
+            # If empty then nothing to do so exit
+            - if <[feeder_inventory].is_empty>:
+                # Do NOT store this in feeder log, it erases the last move data
+                # - define diag_state "Info: empty"
+                #- define diag_log <[diag_log].deep_with[<[diag_key]>].as[<[diag_state]>]>
+                - foreach next
+
+
+            # Check feeder location (trigger)
+            - define feeder_loc <[feeder].get[t]>
+            - if <[feeder_loc].chunk.is_loaded.not>:
+                #- define diag_state "Info: chunk not loaded"
+                #- define diag_log <[diag_log].deep_with[<[diag_key]>].as[<[diag_state]>]>
+                - foreach next
+
+
+            - define feeder_chest_other <[feeder_chest].other_block.if_null[<[feeder_chest]>]>
 
             # If feeder chest is powered skip it
             - define is_powered <proc[powerlevel_blocks].context[<[feeder_chest]>]>
             - if <[is_powered]> > 0:
                 - define diag_state "Info: powered, ignored"
                 - define diag_log <[diag_log].deep_with[<[diag_key]>].as[<[diag_state]>]>
-                - foreach next
-
-            # ** Sign/chest chunks are both loaded.
-            #   check if feeder is inventory like. Be QUICK, the longer procedure for this is FAR too sslow
-            - define feeder_inventory <[feeder_chest].inventory.if_null[null]>
-            - if <[feeder_inventory]> == null:
-                - debug log "<red>Feeder chest missing: <[feeder_chest]>"
-                - run si__remove_mapping def:<[owner]>|<[feeder_chest]>|c
-                - foreach next
-
-            # If empty then nothing to do so exit
-            - if <[feeder_inventory].is_empty>:
-                # Do NOT store this in feeder log, it erases the last move data
-                #- define diag_state "Info: empty"
-                #- define diag_log <[diag_log].deep_with[<[diag_key]>].as[<[diag_state]>]>
                 - foreach next
 
             - define feeder_facings <[feeder].get[face].if_null[<list[]>]>
@@ -1097,6 +1106,7 @@ si__process_feeders:
                     #   This calls the slow distance (and skips the proc) once per list (old code was called 6 tiems for 3 elements qsort)
                     #   The call also gets the plane(s) the. Timing is 154ms for 5,000 elements ==> .031 ms per item. Most item lists will
                     #   by only a few, but even if 10 that is 0.1 ms and we can round to 1ms and be ok.
+
                     - foreach <[targets_list]> as:entry key:loop_index :
                         # The targets_all_full works as a overflow and unknown flag but are only viable if checked AFTER all item filters are applied (item, wildcard)
                         #   If FALSE then we reached the overflow/unknown without finding a suitable move. So Unknown
@@ -1254,16 +1264,16 @@ si__process_feeders:
                             - inventory set destination:<[feeder_chest].inventory> slot:<[feeder_slot]> origin:air
                         - give item:<[feeder_item]> quantity:<[items_to_move]> to:<[target_chest].inventory>
                         - define counter <[counter].add[1]>
+
                         # This is used to allow a more intelligent loop exit logig that can leave multiple levels base don logic
+                        # Found target all done
                         - define move_completed true
                         - foreach stop
 
                 # Feeders ONLY process ONE item, to avoid abuses (and work like hoppers)
                 - define move_completed true
-
     # Record all logs for player for use in player diagnostics
     - flag server si_diag:<[diag_log]>
-
 
 # ***
 # *** HELP TEXT
@@ -1273,14 +1283,14 @@ si__help:
   type: command
   name: simple-inventory
   description: List or reset simple inventory feeders
-  usage: /simple-inventory [player] [list/clear/rebuild/enable/disable/diag] [rebuild-radius-chunks]
+  usage: /simple-inventory [player] [list/clear/repair/enable/disable/diag] [repair-radius-chunks]
   #permission: false
   debug: false
   tab completions:
     # This will complete any online player name for the second argument
     1: <proc[get_all_players].parse[name]>
     # This will complete "alpha" and "beta" for the first argument
-    2: list|clear|rebuild|enable|disable|diag
+    2: list|clear|repair|enable|disable|diag
     # This will allow flags "-a", "-b", or "-c" to be entered in the third, fourth, or fifth argument.
     3: [radius]
   script:
@@ -1312,7 +1322,7 @@ si__help:
         - narrate "<yellow>/simple-inventory [player] clear"
         - narrate "<gray>  Remove all inventory feeder data"
         - narrate "<yellow>/simple-inventory [player] repair [radius]"
-        - narrate "<gray>  Scan signs/frames around player to rebuild flags"
+        - narrate "<gray>  Scan signs/frames around player to repair system"
         - narrate "<gray>  Default radius is <white>5<yellow> chunks."
         - narrate "<yellow>/simple-inventory [player] diag"
         - narrate "<gray>  Show last status of feeders"
@@ -1355,7 +1365,7 @@ si__help:
                         - narrate "  <yellow>Empty"
                         - foreach next
 
-                    # Determin list hanlder type
+                    # Determin list handler type
                     - choose <[group_name]>:
                         - case feeder:
                             - define handler feeder
@@ -1422,7 +1432,7 @@ si__help:
     - if <[command]> == repair:
         - define radius <context.args.get[3]||5>
         - narrate "<green>Repairing <[radius]> radius chunks around player"
-        - run si_repair_triggers_nearby def:<[owner].name>|<[radius]>
+        - run si_repair_triggers_nearby def:<[owner]>|<[radius]>
         - narrate "<yellow>Move to next location and run again"
         - narrate <[enable_message]>
         - stop
@@ -1463,6 +1473,7 @@ si_repair_triggers_nearby:
     # keep radius relatively small for safety
     - define radius <[radius]||5>
     - define loc <[player].location.chunk>
+
     # Get a chunk count for status, note that Denzien lacks a pow() function
     - define span <[radius].mul[2].add[1]>
     - define area_size <[span].mul[<[span]>]>
@@ -1490,6 +1501,7 @@ si_repair_triggers_nearby:
                     - define details <proc[si__parse_sign].context[<[player]>|<[sign]>]>
                     - run si__add_mapping def:<[player]>|<[details].escaped>
 
+                    - stop
 
             # Scan for FRAMES with ITEMS
             - define found_list <[area].entities[*_frame]>
@@ -1500,6 +1512,8 @@ si_repair_triggers_nearby:
                         - define details <proc[si__parse_frame].context[<[player]>|<[frame]>|<[item]>]>
                         - define trigger <[details].get[trigger]>
                         - run si__add_mapping def:<[player]>|<[details].escaped>
+
+                        - stop
 
             # Update status and add waits
             - define counter <[counter].add[1]>
