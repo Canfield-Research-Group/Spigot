@@ -320,20 +320,34 @@ xp_level_from_points:
 
 
 # === process a queue name and return a normalized return result
+# - run_queue : USAGE
+#   - ~run helpers_find_nearest_working_area def.location:<context.entity.location> save:<[sid]>
+#   - define results <proc[queue_parse].context[<entry[<[sid]>].created_queue.determination||false>]>
+# - Returns
+#   - false : Invalid queue received or parsed
+#   - MAP
+#     - cancelled=false | true # always set for a map
+#     - then key:value based on one or more `determine key:value`
 queue_parse:
   type: procedure
   debug: false
-  definitions: queue_data
+  definitions: run_queue
   script:
-    - define result <map[cancelled=false]>
-    - foreach <[queue_data]> as:command :
-      - if <[command]> == cancelled:
-        - define result <[result].with[cancelled].as[true]>
-      - else:
-        # if there is no delimiter return the entire string
-        - define key <[command].before[:]>
-        # if there is no delimiter return a blank
-        - define value <[command].after[:]>
-        - define result <[result].with[<[key]>].as[<[value]>]>
-
-    - determine <[result]>
+    - if <[run_queue]>:
+      - define result <map[cancelled=false]>
+      - foreach <[run_queue]> as:command key:key_specified:
+        - if <[command]> == cancelled:
+          - define result <[result].with[cancelled].as[true]>
+        - else:
+          # Sometimes extra is set to extra
+          - if <[key_specified]||false>:
+            - define result <[result].with[<[key_specified]>].as[<[command]>]>
+          - else:
+            # if there is no delimiter return the entire string
+            - define key <[command].before[:]>
+            # if there is no delimiter return a blank
+            - define value <[command].after[:]>
+            - define result <[result].with[<[key]>].as[<[value]>]>
+      - determine <[result]>
+    - else:
+      - determine false
