@@ -1002,14 +1002,15 @@ si__process_feeders:
             - define feeder_chest <[feeder].get[c]>
             - define feeder_inventory <[feeder_chest].inventory.if_null[null]>
             - if <[feeder_inventory]> == null:
-                - if <[feeder_chest].chunk.is_loaded>:
-                    # Inventory is NULL AND chunk is loaded so chest is GONE
-                    - debug log "<red>Feeder chest missing: <[feeder_chest]>"
-                    - run si__remove_mapping def:<[owner]>|<[feeder_chest]>|c
+                - if <[feeder_chest].chunk.is_loaded.not>:
                     - foreach next
-                - else:
-                    - if <[feeder_inventory].is_empty>:
-                        - foreach next
+                # Inventory is NULL AND chunk is loaded so chest is GONE
+                - debug log "<red>Feeder chest missing: <[feeder_chest]>"
+                - run si__remove_mapping def:<[owner]>|<[feeder_chest]>|c
+                - foreach next
+            - else:
+                - if <[feeder_inventory].is_empty>:
+                    - foreach next
             # Get other feeder chest (double chest), if none just set to self. Makes for faster code as we save multiple ifs later
             - define feeder_chest_other <[feeder_chest].other_block.if_null[<[feeder_chest]>]>
 
@@ -1404,7 +1405,7 @@ si__help:
                                     - define loc <[entry].get[t]>
                                     - narrate "-- <yellow><[item_name]> <gray>@ <green><proc[location_noworld].context[<[loc]>]>"
                         - case wildcard:
-                            # Others liustsdo not have an extra key
+                            # Others liusts do not have an extra key
                             - foreach <[group_list]> as:entry:
                                 - define item_name <[entry].get[f]>
                                 - define loc <[entry].get[t]>
@@ -1501,8 +1502,6 @@ si_repair_triggers_nearby:
                     - define details <proc[si__parse_sign].context[<[player]>|<[sign]>]>
                     - run si__add_mapping def:<[player]>|<[details].escaped>
 
-                    - stop
-
             # Scan for FRAMES with ITEMS
             - define found_list <[area].entities[*_frame]>
             - if <[found_list].is_empty.not>:
@@ -1512,8 +1511,6 @@ si_repair_triggers_nearby:
                         - define details <proc[si__parse_frame].context[<[player]>|<[frame]>|<[item]>]>
                         - define trigger <[details].get[trigger]>
                         - run si__add_mapping def:<[player]>|<[details].escaped>
-
-                        - stop
 
             # Update status and add waits
             - define counter <[counter].add[1]>
