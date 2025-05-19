@@ -43,7 +43,8 @@ simple-inventory:
     max_distance: 176
 
     # Maximum runtime before issuing a wait (there is 50ms oer tick) expressed in ms
-    max_runtime: 15
+    max_runtime: 10
+
     # How long to wait after reaching max_runtime
     wait_time: 1t
 
@@ -52,49 +53,290 @@ simple-inventory:
     # Feeders should NOT be in tis list, those are handled seperately
     list_order: item|wildcard|overflow_item|overflow_wildcard|overflow_fallback|unknown
 
-farmer:
-    # How long to wait between each iteration, too quik and farmer is spastic and LAGS, 1-5s is good. An be expresse din ticks as well (20t)
-    wait_time: 2s
-    # How many blocks to search around Farmer (radius) for a valid copomster/chest, nearest wins
-    max_home_search: 16
-    # Valid chests
-    valid_chests: barrel|chest|trapped_chest|*_shulker_box
-    # Valid crops the farm will harvest
-    valid_crops: carrots|potatoes|wheat|beatroots|nether_wart
-    # Maximum radius of Farm
-    farm_radius_max: 32
-    # Scroll sped of name tag messages, espessed in ticks
-    message_scroll_speed: 20
-    # Message for Farming, use '|' to seperate
-    status:
-      farming:
-        messages:
-          - <yellow>Farming ...
-        emotion: none
+helpers:
+  # How many blocks to search around Farmer (radius) for a valid copomster/chest, nearest wins
+  # - NPCs bascially get close enough to touch the composter, making this distance short speeds up scan
+  search_radius: 4
+  # How close must tbe player be to the villager to trigger NPC, this helps prevents random npcs from being converted
+  player_radius: 10
+  # How many ms farm should stay highlighted, not done in ticks so that the highlight can be cleare don server restarts
+  highlight_duration: 10000
+  
 
-      need_item:
-        messages:
-          - <yellow>Please drop me a hoe
-        emotion: confused
+  professions:
+    farmer:
+        enabled: true
 
-      farm_to_small:
-        messages:
-          - <yellow>Planted area (<[farm_size]>) is too small (min 9)
-          - <yellow>Break composter, replant, replace composter
-        emotion: angry
+        # If dropped in farm NPC will refresh using this item. Existing item is LOST. 
+        #   This can be automated with a crafter, dropper and a long life timer
+        tool_match: "*_hoe"
+        # Tool durability is in one of two eays. An integer whcih is the points to adjust
+        # and a < 1 whcih is a probaility of removing 1 point. So 3 is always looses 3 durability
+        # and 0.75 is a 75% chance on each use of using 1 durabiulity.
+        #   - Stone Hoe : approx 8 stacks od carrots/potatoes/etc.
+        tool_duability_loss: 0
 
-      farm_broken:
-        messages:
-          - <red>Farm seems broken/incomplete
-          - <red>Plant Area, Add composter, place chest on top
-        emotion: angry
+        # Normally enchanted should be refused by NPC, otherwise an accidental drop of yourr awesome tool may get picked up
+        enchanted_allowed: false
 
-      thank_you:
-        messgaes:
-          - <yellow>Thank you!
-        emotion: gratitude
+        # How long to wait betweein AI runs per NPC, make a prime number to help distrinbute load
+        ai_wait_time: 13t
 
-      invalid_item:
-        messages:
-          - <yellow>I can't use enchanted items
-        emotion: confused
+        # **** TODO: Implement thse (valid_chests is done). This is only the trigger. After that the composer and chest are all that must remain
+        # **** until such time as the farm is rescanned due to interal script self-repair or villager being moved or a new villager added
+        # **** currently you can have multiple villagers attacked to a single farm, but that may change
+        # trigger block - when a villager becomes farmer and the trigger block was a composter
+        trigger_block: composter
+        trigger_profession: farmer
+        # require substrate for trigger block to be a valid farm, this must directly below th trigger vblock with one optional water block between
+        substrate: stone_brick
+        # Valid chests : normally only chests are allowed as (without Simple Inventory) there is no other way to empty inventory
+        #  this must be directly ontop of the trigger_block
+        valid_chests: chest
+
+        uniform:
+          head:
+            type: air
+            #color: 153,102,51
+          chest:
+            type: air
+            #color: 102,204,102
+          legs:
+            type: leather_leggings
+            color: 153,102,51
+          boots:
+            type: leather_boots
+            color: 102,51,0
+
+        # *** INTERNAL, changing this will probably break things
+        # BLOCK name, this is not always obvious 
+        #   - plant: <name of item that is used to plant this> - inetrally one is deducted from NPC inventory to simulaye planting (but if not present wills till get planted)
+        #     - use 'none' for NO planting, like pumpkin or other vines
+        crops:
+          wheat:
+            plant: wheat_seeds
+          carrots:
+            plant: carrot
+          potatoes:
+            plant: potatoe
+          nether_wart:
+            plant: nether_wart
+          beetroots:
+            plant: beetroot_seeds
+          cocoa:
+            plant: cocoa_beans
+          pumpkin:
+            plant: none
+          brown_mushroom:
+            plant: brown_mushroom       
+          red_mushroom:
+            plant: red_mushroom       
+          melon:
+            plant: none
+          vine:
+            plant: none
+
+        # In this case we look at the farm substratrate NOT the block growing
+        # Originally we looked at the block growing but this is more flexible
+        # and only requires the player plant melons and cocoa as those turn the
+        # ground to dirt. But this means that STONE under jungle logs will NOT
+        # be detected as a farm, BUT dirt will. Grass is NOT allowed, suggested
+        # to use farmland.
+        #  Use '_crops_' to include the crops in the block slist (in which case y_offset is best at 0)
+        valid_farm:
+          trigger: composter
+          substrate: stone_bricks
+          # Internal logic pretty much says this is allthat really works
+          chest: chest
+          y_offset: -1
+          blocks:
+            - farmland
+            - dirt
+            - podzol
+            - mycelium
+            - nylium
+            - soul_sand
+
+        # How long to wait between each worker iteration, too quik and farmer is spastic and LAGS, 1-5s is good. An be expresse din ticks as well (20t)
+        wait_time: 2s
+
+        # Valid crops the farm will harvest
+
+        # Maximum radius of Farm
+        farm_radius_max: 32
+        # Scroll sped of name tag messages, espessed in ticks
+        message_scroll_speed: 20
+        # Message for Farming, use '|' to seperate
+        status:
+          working:
+            messages:
+              - <gold>Farming ...
+            emotion: none
+
+          finishing_work:
+            messages:
+              - <yellow>Be right with you
+              - <yellow>Finsishing a job
+            emotion: love
+
+          unloading:
+            messages:
+              - <yellow>Unloading inventory
+            emotion: none
+
+          following:
+            messages:
+              - <yellow>Where we going boss?
+              - <yellow>Following you
+            emotion: love
+
+          need_item:
+            messages:
+              - <yellow>Please drop me a hoe
+              - <red>Waiting ...
+            emotion: confused
+
+          farm_scan:
+            messages:
+              - <yellow>Looking for farm boundries
+              - <yellow>Scanning ...
+            emotion: gratitude
+
+          farm_to_small:
+            messages:
+              - <yellow>Planted area (<[farm_size]>) is too small (min 9)
+              - <yellow>Break composter, replant, replace composter
+            emotion: angry
+
+          farm_broken:
+            messages:
+              - <red>Farm seems broken/incomplete
+              - <red>Scanning ...
+            emotion: angry
+
+          thank_you:
+            messages:
+              - <yellow>Thank you!
+            emotion: gratitude
+
+          invalid_item:
+            messages:
+              - <yellow>I can't use enchanted items
+            emotion: confused
+
+          navigate_failed:
+            messages:
+              - <red>I am stuck
+              - <red>Fix route or use leed to move me
+            emotion: confused
+
+
+    # TODO: SKCTECH OF Lumberjack - NOT implemented
+    # TODO: Create a simple inheritence, done a config loading IF we can alter YAML data once loaded to expand
+    # and fill in missing data with template
+    lumberjack:
+        enabled: false
+        tool_match: "*_axe"
+        enchanted_allowed: false
+
+        uniform:
+          head:
+            type: leather_helmet
+            color: 204,0,0
+          chest:
+            type: leather_chestplate
+            color: 153,0,0
+          legs: 
+            type: leather_leggings
+            color: 64,64,64
+          boots:
+            type: leather_boots
+            color: 51,34,0
+
+         # *** INTERNAL, changing this will probably break things
+        # BLOCK name, this is not always obvious 
+        #   - plant: <name of item that is used to plant this> - inetrally one is deducted from NPC inventory to simulaye planting (but if not present wills till get planted)
+        #     - use 'none' for NO planting, like pumpkin or other vines
+        #   - the system replaces the WOOD BLOCk that is on the ground with a sapling when then wood block is removed. So 2x2 will work fine
+        crops:
+          oak:
+            - plant: oak_sapling
+          spruce:
+            - plant: spruce_sapling
+          birch:
+            - plant: birch_sapling
+          jungle:
+            - plant: jungle_sapling
+          acacia:
+            - plant: acacia_sapling
+          dark_oak:
+            - plant: dark_oak_sapling
+          mangrove:
+            # No sapling
+            - plant: mangrove
+          cherry:
+            - plant: cherry_sapling
+
+        valid_farm:
+          trigger: composter
+          substrate: "*_log"
+          # Internal logic pretty much says this is allthat really works
+          chest: chest
+          y_offset: -1
+          blocks:
+            - grass
+            - dirt
+            - podzol
+            - mycelium
+            - nylium
+            - water
+
+
+    # TODO placeholder
+    miner:
+      enabled: false
+      tool_match: "*_axe"
+      enchanted_allowed: false
+
+      uniform:
+        head:
+          type: iron_helmet
+        chest: 
+          type: leather_chestplate
+          color: 64,64,64
+        legs:
+           type: leather_leggings
+           color: 32,32,32
+        boots:
+          type:  chainmail_boots
+
+    # TODO placeholder
+    builder:
+      enabled: false
+      uniform:
+          head:
+            type: golden_helmet
+          chest:
+            type: leather_chestplate
+            color: 255,255,0
+          legs: 
+            type: leather_leggings
+            color: 51,51,255
+          boots:
+            type: leather_boots
+            color: 102,51,0
+
+    # TODO placeholder
+    demolition:
+      enabled: false
+      uniform:
+        head:
+          type: leather_helmet
+          color: 255,0,0
+        chest:
+          type: leather_chestplate
+          color: 255,69,0
+        legs:
+          type: iron_leggings
+        boots:
+          type: iron_boots
