@@ -10,6 +10,10 @@
 # Working
 #
 
+# TODO: Vines (ticky)
+# TODO: Lumberjack
+#   TODO: normalize professions by inheritence from 'default_profession:' at config loading
+
 # = Flags
 #   - Server:
 #     - helpers
@@ -246,7 +250,11 @@ helpers_ai_task:
             - if <[crop_list].contains[<[crop]>].not>:
               - foreach next
 
-            - if <[crop].material.age.is[or_more].than[<[crop].material.maximum_age>]>:
+            # not all crops haev age/maximum age, for example melons and pumpkins. We can use seeds (none) to detect that for all known items
+            - define prior_crop <[crop].material.name>
+            - define direction <[crop].material.direction||null>
+            - define seed <proc[helpers_npc_get_value].context[crops.<[prior_crop]>.plant]>
+            - if <[seed]> == none or <[crop].material.age.is[or_more].than[<[crop].material.maximum_age>]>:
               # This complex mantra call as task, waits for it to finish and then sees if it was cancled (errored)
               - define near_crop <proc[helpers_find_safe_loc].context[<npc.location>|<[crop]>]>
 
@@ -258,16 +266,13 @@ helpers_ai_task:
                   # Stop scanning, it gets expensive, just let it try again next opertunity
                   - foreach stop
 
-              # Check (indirectly) if crop is directional (ie; cocoa bans)
-              - define prior_crop <[crop].material.name>
-              - define direction <[crop].material.direction||null>
 
               - animate <npc> animation:SWING_MAIN_HAND
               # WAIT for the break to finish, otherwis it can harvest the placed item (even with 3t) delay
               # this was seen with cocoa
               # Prevent modest race conditions where two farmers race to a single crop. THis is not perfect
               # but should prevent most of the "dups"
-              - if <[crop].material.name> != air && <[crop].material.age.is[less].than[<[crop].material.maximum_age>]>:
+              - if <[crop].material.name> != air and <[seed]> == null and <[crop].material.age.is[less].than[<[crop].material.maximum_age>]>:
                 - stop
 
               - ~break <[crop]> <npc>
@@ -285,20 +290,32 @@ helpers_ai_task:
               # Plant with what was originally there
               #   Remove plant seed, IGNORE if non left to avoid the overhead of adding a mecabusm to give seeds to an NPC
               #   In most cases the NPC will have the seed from picking up dropped items
-              - define seed <proc[helpers_npc_get_value].context[crops].get[<[prior_crop]>]>
               - if <[seed]> != none:
                 - take item:<[prior_crop]> from:<npc.inventory> quantity:1
 
-              - if <[direction]>:
-                # No Pyhics is needed during placement , otherwise for coca, vines and other attached blocks the MC engine
-                # phtics (block update) can cause th eitem to break. This must be done as well as the waiting break (~break) if using break
-                - modifyblock <[crop]> <[prior_crop]>[direction=<[direction]>]  no_physics
+                - if <[direction]>:
+                  # No Pyhics is needed during placement , otherwise for coca, vines and other attached blocks the MC engine
+                  # phtics (block update) can cause th eitem to break. This must be done as well as the waiting break (~break) if using break
+                  - modifyblock <[crop]> <[prior_crop]>[direction=<[direction]>]  no_physics
+                - else:
+                  - modifyblock <[crop]> <[prior_crop]>
+
+              # Reduce duability of tool
+              - define durability <proc[helpers_npc_get_value].context[tool_duability_loss]>
+              - if <[durability]> < 1:
+                - if <util.random_chance[<[durability].mul[100].round_down>]>:
+                  - define loss 1
+                - else:
+                  - define loss 0
               - else:
-                - modifyblock <[crop]> <[prior_crop]>
+                - define loss <[durability].round_down>
+              # This will automatically adjust durability and handl ebreaking the item, removing it from NPC inventory
+              # TIP: use'adjust `<npc.item_in_hand> durability:x` did not work
+              - adjust <npc> damage_item:[slot=hand;amount=<[loss]>]
 
               - define harvested true
-              # Only one harvested block per AI run
 
+              # NOTE: Only one harvested block per AI run
               - foreach stop
 
     - if <[harvested].not>:
