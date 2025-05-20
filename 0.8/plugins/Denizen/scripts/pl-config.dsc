@@ -16,9 +16,10 @@ pl__load_config:
   - yaml id:pl__config load:data/pl-config.yaml
 
 
+# Returns configuraton located at path, if none return NULL but do NOT toss a warning
 pl__config:
   type: procedure
   debug: false
   definitions: path
   script:
-    - determine <yaml[pl__config].read[<[path]>]>
+    - determine <yaml[pl__config].read[<[path]>]||null>

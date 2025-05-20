@@ -73,8 +73,10 @@ helpers:
         # Tool durability is in one of two eays. An integer whcih is the points to adjust
         # and a < 1 whcih is a probaility of removing 1 point. So 3 is always looses 3 durability
         # and 0.75 is a 75% chance on each use of using 1 durabiulity.
-        #   - Stone Hoe : approx 8 stacks od carrots/potatoes/etc.
-        tool_duability_loss: 0
+        # For a 1 durability a hoe can harvest approx:
+        #   - Stone Hoe : approx 7 stacks of carrots/potatoes/etc.
+        #   - Iton Hoe : approx 15 stacks
+        tool_duability_loss: 0.50
 
         # Normally enchanted should be refused by NPC, otherwise an accidental drop of yourr awesome tool may get picked up
         enchanted_allowed: false
@@ -112,6 +114,8 @@ helpers:
         # BLOCK name, this is not always obvious 
         #   - plant: <name of item that is used to plant this> - inetrally one is deducted from NPC inventory to simulaye planting (but if not present wills till get planted)
         #     - use 'none' for NO planting, like pumpkin or other vines
+        #   - drops: [name:quantity, ...] : Optional, lists the extar drops with optional :quantity. Mostly used for special items like vines which
+        #   normally do not drop anyting on the 'break' action.
         crops:
           wheat:
             plant: wheat_seeds
@@ -135,6 +139,7 @@ helpers:
             plant: none
           vine:
             plant: none
+            drops: [vine]
 
         # In this case we look at the farm substratrate NOT the block growing
         # Originally we looked at the block growing but this is more flexible
