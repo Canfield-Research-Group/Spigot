@@ -218,6 +218,9 @@ si__feeder_notify:
                 - define world_name <[feeder_block].world.name>
                 - define diag_key <[owner].name>.<[world_name]>.<[feeder_block]>
                 - define diag_status <server.flag[si_diag.<[diag_key]>].if_null[No Data]>
+                - if <[diag_status]> == "No Data":
+                    - stop
+
                 - if <[diag_status].starts_with[JAM]>:
                     - define color "<red>"
                 - else:
