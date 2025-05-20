@@ -281,14 +281,15 @@ helpers_ai_task:
               # To reduce maintenance and complications we allow drops to be extended. Note this does NOT eliminate
               # the normal drops via BREAK. If an item appears multiple times each occurance is a seperate drop. A
               # quantity can also be suffixed using a ':' for example' cobblestone:32
-              - define extra_drops <proc[helpers_npc_get_value].context[crops.<[prior_crop]>.drops].if_null[<list[]>]>
-              - foreach <[extra_drops]> as:drop :
-                - if <[drop].contains[:]>:
-                  - define quantity <[drop].after[:]>
-                  - define drop <[drop].before[:]>
-                - else:
-                  - define quantity 1
-                - drop <[drop]> <npc.location> quantity:<[quantity]>
+              - define extra_drops <proc[helpers_npc_get_value].context[crops.<[prior_crop]>.drops]>
+              - if <[extra_drops]> != null:
+                - foreach <[extra_drops]> as:drop :
+                  - if <[drop].contains[:]>:
+                    - define quantity <[drop].after[:]>
+                    - define drop <[drop].before[:]>
+                  - else:
+                    - define quantity 1
+                  - drop <[drop]> <npc.location> quantity:<[quantity]>
 
 
               # Need to wait a tick for item to pop into the world reliably, but for athetics we wait a bit longer

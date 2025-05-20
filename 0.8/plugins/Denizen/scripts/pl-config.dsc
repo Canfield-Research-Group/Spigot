@@ -16,10 +16,12 @@ pl__load_config:
   - yaml id:pl__config load:data/pl-config.yaml
 
 
-# Returns configuraton located at path, if none return NULL but do NOT toss a warning
+# Returns configuraton located at path, if none return 'null', this is a string NOT NULL internal value as I can find
+# no way to return that. So caller needs to check per: `- if <proc[pl__config].......> == null:
+#   This is extreamly annoying and a limitation in Denizen
 pl__config:
   type: procedure
   debug: false
   definitions: path
   script:
-    - determine <yaml[pl__config].read[<[path]>]||null>
+    - determine <yaml[pl__config].read[<[path]>].if_null[null]>
