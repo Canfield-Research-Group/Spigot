@@ -46,6 +46,14 @@ helpers_villager:
   debug: false
   events:
 
+    # These MUST finish before code can run
+    on server start:
+      - flag server helpers.config_merged:false
+      - ~run _helpers_config_merge
+    on script reload:
+      - flag server helpers_config_merged:false
+      - ~run _helpers_config_merge
+
     # use AFTER since we need to entity fully spawned, then remove it
     after villager changes profession:
       # Villager must be within radius to composter and within x of a player (ANY PLAYER)
@@ -151,6 +159,9 @@ helpers_ai_task:
     # Used to close out any running controllers, usually called by assignment
     - if <server.has_flag[reset]>:
       - stop
+
+    # Make sure configs are loaded first, we cannot have a wait inside a procedure ()
+    - ~run _helpers_config_is_ready
 
     # Valid chests
     - define valid_chests <proc[helpers_npc_get_value].context[valid_farm.chest]>
@@ -529,7 +540,7 @@ helpers_scrolling_nametag:
     - define current_tick <util.current_tick>
 
     - if <[messages]>:
-      - if <[current_tick].sub[<[message_timer]>]> > 40:
+      - if <[current_tick].sub[<[message_timer]>]> > <proc[helpers_npc_get_value].context[status_message_delay]>:
         - define sequence:++
         - if <[sequence]> > <[messages].size>:
           - define sequence 1
@@ -552,7 +563,7 @@ helpers_scrolling_nametag:
     #    This will normallyu always file sinze there are a lot of waits in NPC handling. But some actions may
     #    run considerbly faster (such as following), so add tis to stop massive accumulation
     - if <[emotion]> :
-      - if <[current_tick].sub[<[emotion_timer]>]> > 10:
+      - if <[current_tick].sub[<[emotion_timer]>]> > <proc[helpers_npc_get_value].context[status_emotion_delay]>:
         # Set animation over villager: See also: 
         # - https://meta.denizenscript.com/Docs/Commands/PlayEffect
         # - https://meta.denizenscript.com/Docs/Languages/Particle%20Effects
@@ -595,14 +606,6 @@ helpers_find_nearest_working_area:
     # Radius using default if none passed
     - if <[radius]||null> == null:
       - define radius <proc[helpers_config].context[search_radius]>
-
-    # Clear values
-    - define found_profession null
-    - define found_farm null
-    - define found_chest null
-    - define ok false
-    - define profession null
-    - define valid_triggers <list[]>
 
     # Create a cuboid to search, radius is a spwhere and a rectangle will work better as above/below is less critical
     #   We coudl search for surface but we need to support underground farms as well
@@ -946,7 +949,7 @@ helpers_npc_get_value:
   # - Not a valid farm flag so check configuration
   # - for now assume profession exists, otherwise a log will be generated
   - define profession <[farm_data].get[profession]||false>
-  - determine <proc[pl__config].context[helpers.professions.<[profession]>.<[path]>].if_null[false]>
+  - determine <proc[helpers_config].context[professions.<[profession]>.<[path]>]>
 
 
 
@@ -956,7 +959,58 @@ helpers_config:
   definitions: path
   debug: false
   script:
+
   - determine <proc[pl__config].context[helpers.<[path]>]||null>
+
+
+# = merge professions configuration
+_helpers_config_merge:
+  type: task
+  debug: false
+  script:
+
+    # - Ideally we would use the ID from a call tp pl__config but requires that the config script file to be loaded. 
+    # YAML data is NOT unloaded on a 'reload' command. This means data can be stale. Using a yaml version woudl work but it is prone to
+    # maintenance problems, especially in a simple Dneizen workflow. Instead wait a bit to give the system time to
+    # load the file. This is NOT ideal as delays in startup can cause problems but we don;t have a lot of other
+    # mechacnisms to manage this. A server RESTART works fine as the YAML will be gone.
+    #    This code ONLY runs on startup so performance is not critical. Normal script loading is REALLY fast but give it time anyway.
+    #    We could also just re-merge every 30 seconds or so but that seems overkill sicne 'denzien reloads' are rare on production
+    # - Alterantive it so manually run merge if needed: ex run _helpers_config_merge
+    - wait 20t
+    - define accumulated_wait_time 0
+    - while <yaml.list.contains[pl__config].not>:
+      - wait 1t
+      - define accumulated_wait_time:++
+      - if <[accumulated_wait_time].mod[100]> == 0:
+        - debug log "<red>ERROR: _helpers_config_merge() cannot detect YAML loading, likely a bug. Waiting for: <[accumulated_wait_time]> ticks"
+
+    - define yaml_id <proc[pl__load_config_id]>
+    - define defaults <proc[helpers_config].context[profession_default]>
+
+    - define old <yaml[pl__config].read[helpers.professions.farmer.tool_duability_loss].if_null[no-data]>
+
+    - foreach <proc[helpers_config].context[professions]> as:config key:profession :
+      - define combined <[defaults]>
+
+      # Loop through all changes for this profession and apply to the new combined list
+      - foreach <[config]> as:value key:key_path :
+        - define combined <[combined].deep_with[<[key_path]>].as[<[value]>]>
+
+      # Update Yaml
+      - yaml id:<[yaml_id]> set helpers.professions.<[profession]>:<[combined]>
+
+    - flag server helpers.config_merged:true
+
+
+# = Waits until configuation is ready. Used by some code (such as task:assigned) to make sure configs are loaded
+_helpers_config_is_ready:
+  type: task
+  debug: false
+  script:
+
+  - while <server.flag[helpers_config_merged].if_null[false].not>:
+    - wait 1t
 
 
 # = returns true if this NPC is a farmer (of any type)
@@ -971,7 +1025,6 @@ helpers_npc_is_farmer:
     # No farm data so we cannot fetch profession which is needed for this npc
     - determine true
   - determine false
-
 
 # = return the farm data associated with the current NPC, allows override npc, otherwise uses context NPC
 helpers_farm_for_npc:

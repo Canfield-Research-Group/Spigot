@@ -61,41 +61,125 @@ helpers:
   player_radius: 10
   # How many ms farm should stay highlighted, not done in ticks so that the highlight can be cleare don server restarts
   highlight_duration: 10000
-  
+
+
+  # ***
+  # *** Defaults are used as a fallback if a path is not found in the chosen profession.
+  # *** Note some callers may use a single path to fetch the entire hierarchy (for example uniform). Such
+  # *** callers will FAIL to pick up the defaults.
+  # *** WARING: Lists (not key/value) cannot be merged and are always a set, for that reason do NOT include
+  # *** lists in default. In general avoid maps as well except for status which will always be fetched directly by
+  # *** parth by status.<key>
+  # 
+  # OVERRIDE these in the professions.<key> using a keypath like this `key-path: value`. Note the value will REPLAVE the entire
+  # data at the key-path.
+  #   - Override a single key in a nested hierarchy
+  #     - status.working.message: '<red>Mining ...'
+  #   - Override an entire hierarchiy
+  #     - status: ... the entire status key is replaced ...
+  #
+  profession_default:
+
+    enabled: true
+
+    # Tool durability is in one of two eays. An integer whcih is the points to adjust
+    # and a < 1 whcih is a probaility of removing 1 point. So 3 is always looses 3 durability
+    # and 0.75 is a 75% chance on each use of using 1 durabiulity.
+    # For a 1 durability a hoe can harvest approx:
+    #   - Stone Hoe : approx 7 stacks of carrots/potatoes/etc.
+    #   - Iton Hoe : approx 15 stacks
+    tool_duability_loss: 0.50
+
+    # Normally enchanted should be refused by NPC, otherwise an accidental drop of yourr awesome tool may get picked up
+    enchanted_allowed: false
+
+    # How long to wait betweein AI runs per NPC, make a prime number to help distrinbute load
+    ai_wait_time: 13t
+
+    # How long to wait between each worker iteration, too quik and farmer is spastic and LAGS, 1-5s is good. An be expresse din ticks as well (20t)
+    wait_time: 2s
+
+    # Maximum radius of Farm
+    farm_radius_max: 32
+
+
+    # *** Messages
+    # Delay in MS for scrolling to next message
+    status_message_delay: 40
+    status_emotion_delay: 10
+
+    # Messages for each status. Multiple messages are possible list and they will slowly "scroll" in the name area
+    # The emotion maps to a special effects (see code)
+    status:
+      # *** These usually need to be overridden (at least the 'messages:' key)
+      working:
+        messages:
+          - <gold>Working ...
+        emotion: none
+
+      need_item:
+        messages:
+          - <yellow>Please give me a tool
+          - <red>Waiting ...
+        emotion: confused
+
+      # *** Generic messages, useful 
+      finishing_work:
+        messages:
+          - <yellow>Be right with you
+          - <yellow>Finsishing a job
+        emotion: love
+
+      unloading:
+        messages:
+          - <yellow>Unloading inventory
+        emotion: none
+
+      following:
+        messages:
+          - <yellow>Where we going boss?
+          - <yellow>Following you
+        emotion: love
+
+      farm_scan:
+        messages:
+          - <yellow>Looking for farm boundries
+          - <yellow>Scanning ...
+        emotion: gratitude
+
+      farm_broken:
+        messages:
+          - <red>Farm seems broken/incomplete
+          - <red>Scanning ...
+        emotion: angry
+
+      thank_you:
+        messages:
+          - <yellow>Thank you!
+        emotion: gratitude
+
+      invalid_item:
+        messages:
+          - <yellow>I can't use enchanted items
+        emotion: confused
+
+      navigate_failed:
+        messages:
+          - <red>I am stuck
+          - <red>Fix route or use leed to move me
+        emotion: confused
+
 
   professions:
+    # Name MUST match a valid minecraft profession name
     farmer:
         enabled: true
 
         # If dropped in farm NPC will refresh using this item. Existing item is LOST. 
         #   This can be automated with a crafter, dropper and a long life timer
         tool_match: "*_hoe"
-        # Tool durability is in one of two eays. An integer whcih is the points to adjust
-        # and a < 1 whcih is a probaility of removing 1 point. So 3 is always looses 3 durability
-        # and 0.75 is a 75% chance on each use of using 1 durabiulity.
-        # For a 1 durability a hoe can harvest approx:
-        #   - Stone Hoe : approx 7 stacks of carrots/potatoes/etc.
-        #   - Iton Hoe : approx 15 stacks
-        tool_duability_loss: 0.50
 
-        # Normally enchanted should be refused by NPC, otherwise an accidental drop of yourr awesome tool may get picked up
-        enchanted_allowed: false
-
-        # How long to wait betweein AI runs per NPC, make a prime number to help distrinbute load
-        ai_wait_time: 13t
-
-        # **** TODO: Implement thse (valid_chests is done). This is only the trigger. After that the composer and chest are all that must remain
-        # **** until such time as the farm is rescanned due to interal script self-repair or villager being moved or a new villager added
-        # **** currently you can have multiple villagers attacked to a single farm, but that may change
-        # trigger block - when a villager becomes farmer and the trigger block was a composter
-        trigger_block: composter
-        trigger_profession: farmer
-        # require substrate for trigger block to be a valid farm, this must directly below th trigger vblock with one optional water block between
-        substrate: stone_brick
         # Valid chests : normally only chests are allowed as (without Simple Inventory) there is no other way to empty inventory
-        #  this must be directly ontop of the trigger_block
-        valid_chests: chest
-
         uniform:
           head:
             type: air
@@ -132,9 +216,9 @@ helpers:
           pumpkin:
             plant: none
           brown_mushroom:
-            plant: brown_mushroom       
+            plant: none
           red_mushroom:
-            plant: red_mushroom       
+            plant: none
           melon:
             plant: none
           vine:
@@ -162,78 +246,14 @@ helpers:
             - nylium
             - soul_sand
 
-        # How long to wait between each worker iteration, too quik and farmer is spastic and LAGS, 1-5s is good. An be expresse din ticks as well (20t)
-        wait_time: 2s
+        
+        # Message specific to farming, most messages are generic so only a few typically need changing
+        status.working.messages: 
+          - <gold>Farming ...
 
-        # Valid crops the farm will harvest
-
-        # Maximum radius of Farm
-        farm_radius_max: 32
-        # Scroll sped of name tag messages, espessed in ticks
-        message_scroll_speed: 20
-        # Message for Farming, use '|' to seperate
-        status:
-          working:
-            messages:
-              - <gold>Farming ...
-            emotion: none
-
-          finishing_work:
-            messages:
-              - <yellow>Be right with you
-              - <yellow>Finsishing a job
-            emotion: love
-
-          unloading:
-            messages:
-              - <yellow>Unloading inventory
-            emotion: none
-
-          following:
-            messages:
-              - <yellow>Where we going boss?
-              - <yellow>Following you
-            emotion: love
-
-          need_item:
-            messages:
-              - <yellow>Please drop me a hoe
-              - <red>Waiting ...
-            emotion: confused
-
-          farm_scan:
-            messages:
-              - <yellow>Looking for farm boundries
-              - <yellow>Scanning ...
-            emotion: gratitude
-
-          farm_to_small:
-            messages:
-              - <yellow>Planted area (<[farm_size]>) is too small (min 9)
-              - <yellow>Break composter, replant, replace composter
-            emotion: angry
-
-          farm_broken:
-            messages:
-              - <red>Farm seems broken/incomplete
-              - <red>Scanning ...
-            emotion: angry
-
-          thank_you:
-            messages:
-              - <yellow>Thank you!
-            emotion: gratitude
-
-          invalid_item:
-            messages:
-              - <yellow>I can't use enchanted items
-            emotion: confused
-
-          navigate_failed:
-            messages:
-              - <red>I am stuck
-              - <red>Fix route or use leed to move me
-            emotion: confused
+        status.need_item.messages: 
+          - <yellow>Please drop me a hoe
+          - <red>Waiting ...
 
 
     # TODO: SKCTECH OF Lumberjack - NOT implemented
