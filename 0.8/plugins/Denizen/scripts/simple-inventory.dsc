@@ -150,7 +150,8 @@ si__sign_or_frame_events:
 
         # Sneaking and right click lets you edit a sign SOMETIMES but it is NOT reliable, it was a few hour ago. Not sure what's up with that
         # in any case we need a bypass so stick allows edit
-        - if <player.is_sneaking> || <player.item_in_hand.material.name.advanced_matches[stick|*frame|*_sign]>:
+        #  Allow a toch as it is commonly held and in inventory, stick for legacy and frame/sign because those are often in hand during editing of simple inventory chests
+        - if <player.is_sneaking> || <player.item_in_hand.material.name.advanced_matches[stick|*frame|*_sign|torch]>:
             - stop
 
         - define details <proc[si__parse_sign].context[<player>|<[loc]>]>
