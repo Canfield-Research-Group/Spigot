@@ -104,7 +104,7 @@ sc__help:
         - narrate "<yellow>/simple-inventory [player] quiet"
         - narrate "<gray> Disables copy/paste messages"
         - narrate "<yellow>/simple-inventory [player] verbose"
-        - narrate "<gray>  Enables copy/paste messagesr"
+        - narrate "<gray>  Enables copy/paste messages"
         - narrate "<yellow>Usage"
         - narrate "<gray>  Left click/beak a sign to copy sign text to sign clipboard"
         - narrate "<gray>  Edit/Add a sign, leave text empty, any sign clipboard"
