@@ -51,7 +51,7 @@ helpers_villager:
       - flag server helpers.config_merged:false
       - ~run _helpers_config_merge
     on script reload:
-      - flag server helpers_config_merged:false
+      - flag server helpers.config_merged:false
       - ~run _helpers_config_merge
 
     # use AFTER since we need to entity fully spawned, then remove it
@@ -969,6 +969,8 @@ _helpers_config_merge:
   debug: false
   script:
 
+    - debug log "<red>Config Merged Entered"
+
     # - Ideally we would use the ID from a call tp pl__config but requires that the config script file to be loaded. 
     # YAML data is NOT unloaded on a 'reload' command. This means data can be stale. Using a yaml version woudl work but it is prone to
     # maintenance problems, especially in a simple Dneizen workflow. Instead wait a bit to give the system time to
@@ -1000,6 +1002,7 @@ _helpers_config_merge:
       # Update Yaml
       - yaml id:<[yaml_id]> set helpers.professions.<[profession]>:<[combined]>
 
+    - debug log "<green>Config Merged FINISHED"
     - flag server helpers.config_merged:true
 
 
@@ -1009,9 +1012,8 @@ _helpers_config_is_ready:
   debug: false
   script:
 
-  - while <server.flag[helpers_config_merged].if_null[false].not>:
-    - wait 1t
-
+  - while <server.has_flag[helpers.config_merged].not> or <server.flag[helpers.config_merged].not>:
+    - wait 20t
 
 # = returns true if this NPC is a farmer (of any type)
 helpers_npc_is_farmer:
