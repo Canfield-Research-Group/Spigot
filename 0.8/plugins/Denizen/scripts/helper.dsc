@@ -57,8 +57,6 @@ helpers_villager:
     # use AFTER since we need to entity fully spawned, then remove it
     after villager changes profession:
       # Villager must be within radius to composter and within x of a player (ANY PLAYER)
-      #- debug log "<red>Villager changes: <context.entity> -- <context.profession> -- <context.reason>"
-      #- debug log "<green>Loc: <context.entity.location>"
       - define villager <context.entity>
       - define player_radius <proc[helpers_config].context[player_radius]>
       - define players <[villager].location.find_players_within[<[player_radius]>]>
@@ -80,6 +78,15 @@ helpers_villager:
         - run helpers_highlight_farm def.farm_key:<[farm_key]>
       - else:
         - narrate "<red>Block is not a farm trigger. Is it crafted correctly?"
+
+
+    on player right clicks npc:
+      - ratelimit <player> 10t
+      - if <npc.owner.item_in_hand.material.name> == torch:
+        - define scripts <npc.scripts>
+        # SET will clear then add and trigger the 'on assignment'
+        - assignment set script:helpers_brain to:<npc>
+        - narrate "<green>Repair performed <npc>" targets:<npc.owner>
 
 
 helpers_brain:
@@ -159,7 +166,6 @@ helpers_ai_task:
     # Used to close out any running controllers, usually called by assignment
     - if <server.has_flag[reset]>:
       - stop
-
     # Make sure configs are loaded first, we cannot have a wait inside a procedure ()
     - ~run _helpers_config_is_ready
 
@@ -241,7 +247,6 @@ helpers_ai_task:
       - run helpers_scrolling_nametag def:need_item
       - stop
 
-
     # - Process Harvesting
     - define harvested false
     # Tracks if the NPC should be forced towalk during idle, useful to try and get unstuck from harvesting
@@ -265,7 +270,8 @@ helpers_ai_task:
             - define prior_crop <[crop].material.name>
             - define direction <[crop].material.direction||null>
             - define seed <proc[helpers_npc_get_value].context[crops.<[prior_crop]>.plant]>
-            - if <[seed]> == none or <[crop].material.age.is[or_more].than[<[crop].material.maximum_age>]>:
+            - define max_age <proc[helpers_npc_get_value].context[crops.<[prior_crop]>.max_age]>
+            - if <[seed]> == none or <[max_age]> == null or <[crop].material.age.is[or_more].than[<[crop].material.maximum_age>]>:
               # This complex mantra call as task, waits for it to finish and then sees if it was cancled (errored)
               - define near_crop <proc[helpers_find_safe_loc].context[<npc.location>|<[crop]>]>
 
@@ -279,13 +285,12 @@ helpers_ai_task:
 
 
               - animate <npc> animation:SWING_MAIN_HAND
-              # WAIT for the break to finish, otherwis it can harvest the placed item (even with 3t) delay
-              # this was seen with cocoa
               # Prevent modest race conditions where two farmers race to a single crop. THis is not perfect
               # but should prevent most of the "dups"
-              - if <[crop].material.name> != air and <[seed]> == null and <[crop].material.age.is[less].than[<[crop].material.maximum_age>]>:
+              - if <[crop].material.name> = air :
                 - stop
-
+              - if <[seed]> == null or <[max_age]> == null or <[crop].material.age.is[less].than[<[crop].material.maximum_age>]>:
+                - stop
               - ~break <[crop]> <npc>
 
               # Some items do NOT break and drop items unless special devices are used (Farmers using hoe on Vines)
@@ -360,7 +365,6 @@ helpers_deliver_task:
   type: task
   debug: false
   script:
-    #- debug log "<gold>Unloading Inventory <npc>"
     - run helpers_scrolling_nametag def:unloading
 
     - define chest_loc <proc[helpers_npc_get_value].context[chest]>
@@ -424,7 +428,7 @@ helpers_npc_follow:
   script:
   - define is_following <npc.flag[is_following]||null>
   - if <[is_following]> == null or <npc.owner.is_online.not> or <npc.owner.item_in_hand.material.name> != lead or <npc.owner.is_sneaking>:
-    - narrate "<green>Following canceled"
+    - narrate "<yellow>Following canceled"
     - flag <npc> is_following:!
     - stop
 
@@ -453,11 +457,9 @@ helpers_walk_to:
     # in some directions we adjust that
     - define npc_loc <npc.location>
     - if <[npc_loc].y> != <[npc_loc].y.round>:
-      #- define npc_start <npc.location>
       # .1 is not enough to break things and is JUST enough to work (even through the common .9374 + .05 is not quite on the surface it is close enough)
       #  Adding .05 worked very well, but still failed
       - teleport <npc> <npc.location.add[0, .1, 0]>
-      #- debug log "<aqua>Misalignment detected: adjusting from: <yellow><[npc_loc].y> TO <green><npc.location.y>"
     - define debug_start <npc.location>
 
     # FInd location to walk to
@@ -466,7 +468,6 @@ helpers_walk_to:
       - define location <proc[helpers_find_safe_loc].context[<npc.location>|<[location]>]>
 
     - ~walk <npc> <[location]> speed:1 auto_range
-    #- debug log "<yellow>FROM: <[debug_start]> TO <green> <[location]>"
 
     # using distance sqared means we need to 2x the allowed distance, so within 2 means gt 4
     - if <npc.location.distance_squared[<[location]>].is[more].to[4]>:
@@ -521,7 +522,6 @@ helpers_scrolling_nametag:
   debug: false
   definitions: status
   script:
-
     # State is only reset if status is different than prior.
     - define message_data <npc.flag[message]||<map[status=null]>>
     - define prior_status <[message_data].get[status]||false>
@@ -540,7 +540,8 @@ helpers_scrolling_nametag:
     - define current_tick <util.current_tick>
 
     - if <[messages]>:
-      - if <[current_tick].sub[<[message_timer]>]> > <proc[helpers_npc_get_value].context[status_message_delay]>:
+      # Use ABS to handle restarts on ticks
+      - if <[current_tick].sub[<[message_timer]>].abs> > <proc[helpers_npc_get_value].context[status_message_delay]>:
         - define sequence:++
         - if <[sequence]> > <[messages].size>:
           - define sequence 1
@@ -550,7 +551,7 @@ helpers_scrolling_nametag:
 
         # Per web:
         # this triggers on spawn again if it causes the NPC to be despawned and re-spawned under the hood — which can happen if:
-        # You change the NPC’s name while it’s not currently spawned, and then some other code or Citizens automatically respawns it.
+        # You change the NPC's name while it's not currently spawned, and then some other code or Citizens automatically respawns it.
         # Or worse: some edge cases in Citizens can cause a name change to trigger a re-initialization that looks like a respawn.
         #
         #  This can be  triggered by a name change due to citizens interactions
@@ -631,7 +632,6 @@ helpers_find_nearest_working_area:
         - foreach <proc[helpers_config].context[professions]> as:config key:profession :
           - define valid_chests <[config].deep_get[valid_farm.chest]>
           - define trigger_block <[config].deep_get[valid_farm.trigger]>
-
           # See if this structure matches the curent profession, exit ASAP on mismatch
           - if <[base_loc_tmp].material.name> == <[trigger_block]>:
               # Check validtiy of farm structure
@@ -696,7 +696,10 @@ helpers_get_working_area:
     - define west <proc[helpers_scan_to_edge].context[<[origin]>|<location[-1,0,0]>|<[config]>]>
     - define east <proc[helpers_scan_to_edge].context[<[origin]>|<location[1,0,0]>|<[config]>]>
 
+    # Farm height is a delta, as the default is to add 0 to the base cuboid. So we subtract 1
+    - define farm_height <proc[helpers_npc_get_value].context[farm_height]>
     - define corner1 <location[<[west].x>,<[origin].y.sub[0]>,<[south].z>,<[world]>]>
+    #- define corner2 <location[<[east].x>,<[origin].y.add[<[farm_height]>]>,<[north].z>,<[world]>]>
     - define corner2 <location[<[east].x>,<[origin].y.add[0]>,<[north].z>,<[world]>]>
 
     - define farm_area <[corner1].to_cuboid[<[corner2]>]>
@@ -798,7 +801,7 @@ helpers_pick_up_tool:
     #   Drop area is one below cuboid (items site on TOP of a block so you need to look at the block one below you expect to, or so it seems)
     - define farm_area <proc[helpers_npc_get_value].context[area]>
 
-    # Expand top and bottom to make it easier to find item sthat might have fallen into water
+    # Expand top and bottom to make it easier to find item that might have fallen into water
     # or ot top of something else. It's fast since entity scanning is WAY faster than block scanning
     - define drop_area <[farm_area].expand_one_side[0,-2,0].expand_one_side[0,1,0]>
     - define tool_matcher <proc[helpers_npc_get_value].context[tool_match]>
@@ -832,7 +835,6 @@ helpers_pick_up_tool:
         - stop
 
       # Remove any existing hoes, they are instantly consumed
-      - debug log "<red>Removing HOE"
       - define existing_tools <npc.inventory.list_contents.filter_tag[<[filter_value].material.name.advanced_matches[<[tool_matcher]>]>]>
       - foreach <[existing_tools]> as:item :
         - take item:<[item]> from:<npc.inventory>
@@ -911,11 +913,12 @@ helpers_npc_spawn:
 #   - see helpers_farm_for_npc()
 # = path : DOT path to key to retrieve, do NOT include 'professions.<procession>' component as that is already preset
 # = npc_or_loc : The NPC to access, or a location or form_key
+# = default : defaults to null, otherwise the value to return if key path does not exist
 # = RETURNS the value for the configuration path OR false if there is no farm data/configuration
 
 helpers_npc_get_value:
   type: procedure
-  definitions: path|npc_or_loc
+  definitions: path|npc_or_loc|default
   debug: false
   script:
 
@@ -949,11 +952,15 @@ helpers_npc_get_value:
   # - Not a valid farm flag so check configuration
   # - for now assume profession exists, otherwise a log will be generated
   - define profession <[farm_data].get[profession]||false>
-  - determine <proc[helpers_config].context[professions.<[profession]>.<[path]>]>
-
+  - define value <proc[helpers_config].context[professions.<[profession]>.<[path]>]>
+  - if <[value]> == null:
+    # Trap error and return null
+    - define value <[default].if_null[null]>
+  - determine <[value]>
 
 
 # = return value for the configuration path for this module, not NPC specific
+# - will return null if path does not exist
 helpers_config:
   type: procedure
   definitions: path
@@ -968,8 +975,6 @@ _helpers_config_merge:
   type: task
   debug: false
   script:
-
-    - debug log "<red>Config Merged Entered"
 
     # - Ideally we would use the ID from a call tp pl__config but requires that the config script file to be loaded. 
     # YAML data is NOT unloaded on a 'reload' command. This means data can be stale. Using a yaml version woudl work but it is prone to
@@ -1002,7 +1007,6 @@ _helpers_config_merge:
       # Update Yaml
       - yaml id:<[yaml_id]> set helpers.professions.<[profession]>:<[combined]>
 
-    - debug log "<green>Config Merged FINISHED"
     - flag server helpers.config_merged:true
 
 
