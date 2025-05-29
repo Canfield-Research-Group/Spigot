@@ -61,24 +61,24 @@ helpers_villager:
       - define player_radius <proc[helpers_config].context[player_radius]>
       - define players <[villager].location.find_players_within[<[player_radius]>]>
       - define player <[players].get[1]||null>
-      - if <[player]>:
-        - define sid helpers_village_<util.current_time_millis>
-        - ~run helpers_find_nearest_working_area save:<[sid]> def.location:<context.entity.location>
-        - define result <proc[queue_parse].context[<entry[<[sid]>].created_queue.determination||false>]>
-        - if <[result]>:
-          - ~run helpers_npc_spawn def:<[villager]>|<[player]>|<[result].get[farm_key]>
+      - ~run _helpers_reassign_npc_to_nearest def.villager:<[villager]> def.player:<[player]> def.location:<context.entity.location>
+      #- if <[player]>:
+      #  - define sid helpers_village_<util.current_time_millis>
+      #  - ~run helpers_find_nearest_working_area save:<[sid]> def.location:<context.entity.location>
+      #  - define result <proc[queue_parse].context[<entry[<[sid]>].created_queue.determination||false>]>
+      #  - if <[result]>:
+      #    - ~run helpers_npc_spawn def:<[villager]>|<[player]>|<[result].get[farm_key]>
 
     on player right clicks composter:
       - ratelimit <player> 1s
       - define sid helpers_village_<util.current_time_millis>
       - ~run helpers_find_nearest_working_area save:<[sid]> def.location:<context.location> def.radius:1
       - define result <proc[queue_parse].context[<entry[<[sid]>].created_queue.determination||false>]>
-      - if <[result]>:
-        - define farm_key <[result].get[farm_key]>
-        - run helpers_highlight_farm def.farm_key:<[farm_key]>
+      - define farm_key <[result].get[farm_key]||null>
+      - if <[farm_key]> == null:
+          - narrate "<red>Block is not a farm trigger. Is it crafted correctly?"
       - else:
-        - narrate "<red>Block is not a farm trigger. Is it crafted correctly?"
-
+          - run helpers_highlight_farm def.farm_key:<[farm_key]>
 
     on player right clicks npc:
       - ratelimit <player> 10t
@@ -139,21 +139,26 @@ helpers_ai_controller:
       - stop
 
     # FIlter QUEUE to THIS NPC and if more than one stop the current being attempted (see simple-inventory for why this works)
-    # - be sure to wait 1 tick for calling QUEUE to end otherwise we will the recustive one
+    # - be sure to wait 1 tick for calling QUEUE to end otherwise we will the recusive one
     - wait 1t
-    - define queues <script.queues.filter_tag[<[filter_value].id.starts_with[helpers_ai_controller_].and[<[filter_value].npc.equals[<npc>].if_null[false]>]>]>
-    - if <[queues].size> > 1:
-      - debug log "<red>Stopping queue <queue.numeric_id> there are too many others running: <[queues].size>"
-      - stop
+
+    # Ratelimit is often better than queue monitoring and faster
+    - ratelimit <npc> 1s
+    #- define queues <script.queues.filter_tag[<[filter_value].id.starts_with[helpers_ai_controller_].and[<[filter_value].npc.equals[<npc>].if_null[false]>]>]>
+    #- if <[queues].size> > 1:
+    #  - debug log "<red>Stopping queue <queue.numeric_id> there are too many others running: <[queues].size>"
+    #  - stop
 
     - define queue_id helpers_ai_task<npc.id>
     - define sid myscript_<util.current_tick>
     - ~run helpers_ai_task id:<[queue_id]> save:<[sid]>
     - define results <proc[queue_parse].context[<entry[<[sid]>].created_queue.determination||list[]>]>
 
-    - define wait_time <proc[helpers_npc_get_value].context[ai_wait_time]>
-    - define delay <[results].get[delay]||<[wait_time]>>
+    # If NPC lacks connection to a farm (broken) the wait time will not be available, so make on up. Go slow to avoid this NPC consuming CPU
+    - define wait_time <proc[helpers_config].context[ai_wait_time]>
+    - define delay <[results].get[delay].if_null[<[wait_time]>]>
     - wait <[delay]>
+    - wait 40t
 
     # Recycle to keep brain controler alive
     - run helpers_ai_controller
@@ -171,10 +176,15 @@ helpers_ai_task:
 
     # Valid chests
     - define valid_chests <proc[helpers_npc_get_value].context[valid_farm.chest]>
+    - if <[valid_chests]> == null:
+        - debug log "<red>AI REPAIR <npc>: farm data not found - REPAIRING"
+        - ~run _helpers_reassign_npc_to_nearest def.villager:<npc> def.player:<npc.player_created> def.location:<npc.location>
+        - stop
+
     # Valid crops the farm will harvest
     - define valid_crops <proc[helpers_npc_get_value].context[crops].keys>
 
-    # - Simulate LEASH
+    # - Simulate Minecraft LEASH
     - if <npc.has_flag[is_following]>:
       # Force a re-evaluation of the farm
       - flag <npc> helers.farm.key:!
@@ -186,7 +196,7 @@ helpers_ai_task:
     # Check if the environment is Sane for this farmer
     #   TIP: if any of these become null then all are invalid. Bets practice is to clear the base_loc to be forward compatible
     - define farm_data <proc[helpers_farm_for_npc]>
-    - if <[farm_data]>:
+    - if <[farm_data]> != null:
       - define farm_loc <[farm_data].get[farm]>
       - define chest_loc <[farm_data].get[chest]>
       - define farm_area <[farm_data].get[area]>
@@ -269,14 +279,23 @@ helpers_ai_task:
             # not all crops haev age/maximum age, for example melons and pumpkins. We can use seeds (none) to detect that for all known items
             - define prior_crop <[crop].material.name>
             - define direction <[crop].material.direction||null>
+
+            # Get crops harvest age, use -1 for NONE
             - define seed <proc[helpers_npc_get_value].context[crops.<[prior_crop]>.plant]>
-            - define max_age <proc[helpers_npc_get_value].context[crops.<[prior_crop]>.max_age]>
-            - if <[seed]> == none or <[max_age]> == null or <[crop].material.age.is[or_more].than[<[crop].material.maximum_age>]>:
+            - define harvest_age <proc[helpers_npc_get_value].context[crops.<[prior_crop]>.max_age]>
+            - if <[seed]> == none :
+                # This crop has no max-age
+                - define harvest_age -1
+            - else:
+              - define harvest_age <[crop].material.maximum_age.if_null[-1]>
+
+
+            - if <[crop].material.age.if_null[-1].is[or_more].than[<[harvest_age]>]>:
               # This complex mantra call as task, waits for it to finish and then sees if it was cancled (errored)
               - define near_crop <proc[helpers_find_safe_loc].context[<npc.location>|<[crop]>]>
 
               - define sid myscript_<util.current_tick>
-              # WARNING: THis method can CHANGE destination due to path blocked. So let it handle any anomolies
+              # WARNING: This method can CHANGE destination due to path blocked. So let it handle any anomolies
               - ~run helpers_walk_to def:<[crop]> save:<[sid]>
               - define results <proc[queue_parse].context[<entry[<[sid]>].created_queue.determination||list[]>]>
               - if <[results].get[cancelled]||false>:
@@ -287,9 +306,9 @@ helpers_ai_task:
               - animate <npc> animation:SWING_MAIN_HAND
               # Prevent modest race conditions where two farmers race to a single crop. THis is not perfect
               # but should prevent most of the "dups"
-              - if <[crop].material.name> = air :
+              - if <[crop].material.name> == air :
                 - stop
-              - if <[seed]> == null or <[max_age]> == null or <[crop].material.age.is[less].than[<[crop].material.maximum_age>]>:
+              - if <[crop].material.age.if_null[-1].is[less].than[<[harvest_age]>]>:
                 - stop
               - ~break <[crop]> <npc>
 
@@ -358,6 +377,21 @@ helpers_ai_task:
     # and surive reloads, spawn, despawn. The only way to stop it is to remove the npc
     - stop
 
+
+# = re-assign villager to nearest farm
+#
+# - villager can be a villager OR npc
+_helpers_reassign_npc_to_nearest:
+  type: task
+  debug: false
+  definitions: player|villager|location
+  script:
+    - define villager <[villager].if_null[<npc>]>
+    - define sid helpers_village_<util.current_time_millis>
+    - ~run helpers_find_nearest_working_area save:<[sid]> def.location:<[location]>
+    - define result <proc[queue_parse].context[<entry[<[sid]>].created_queue.determination||false>]>
+    - if <[result]>:
+      - ~run helpers_npc_spawn def:<[villager]>|<[player]>|<[result].get[farm_key]>
 
 
 # - Delivery items from NPC to chest
@@ -608,6 +642,8 @@ helpers_find_nearest_working_area:
     - if <[radius]||null> == null:
       - define radius <proc[helpers_config].context[search_radius]>
 
+    - debug log "<red>Highlight: <[location]> -- <[radius]>"
+
     # Create a cuboid to search, radius is a spwhere and a rectangle will work better as above/below is less critical
     #   We coudl search for surface but we need to support underground farms as well
     # Upper / lower cuboid
@@ -647,7 +683,7 @@ helpers_find_nearest_working_area:
                 - define area <proc[helpers_get_working_area].context[<[base_loc_tmp]>|<[config]>]>
                 # - SEE: maintain comment block at top to align with this
                 - define farm_key  <[base_loc_tmp].simple>
-                - define farm_data <map[farm_key=<[farm_key]>;farm=<[base_loc_tmp]>;profession=<[profession]>;chest=<[chest_loc_tmp]>;area=<[area]>]>
+                - define farm_data <map[ok=true;farm_key=<[farm_key]>;farm=<[base_loc_tmp]>;profession=<[profession]>;chest=<[chest_loc_tmp]>;area=<[area]>]>
                 - flag server helpers.farm.<[farm_key]>:<[farm_data]>
                 - determine <[farm_data]>
                 # task exits now
@@ -749,7 +785,8 @@ helpers_highlight_farm:
   debug: false
   definitions: farm_key
   script:
-    - flag server helpers.farm_highlight.<[farm_key]>:<util.current_time_millis>
+    - define end_ms <util.current_time_millis.add[<proc[helpers_config].context[highlight_duration]>]>
+    - flag server helpers.farm_highlight.<[farm_key]>:<[end_ms]>
     - run helpers_highlight_refresh_farm
 
 
@@ -765,18 +802,20 @@ helpers_highlight_refresh_farm:
     - ratelimit <player> 8t
 
     # Show outline of farm for a few seconds
-    - define highlight_max <util.current_time_millis.sub[<proc[helpers_config].context[highlight_duration]>]>
+    - define now <util.current_time_millis>
     - define highlight <server.flag[helpers.farm_highlight].if_null[<map[]>]>
 
     - define active 0
     - foreach <[highlight]>  key:farm_key as:start_ms :
-      - if <[start_ms]> < <[highlight_max]>:
+      - debug log "<green>Highlight (a): <[active]> -- <[farm_key]> -- <[start_ms]> -- <[now]>"
+      - if <[start_ms]> < <[now]>:
+        - debug log "<red> STOP highlight"
         # Highlight expired close it
         - flag server helpers.farm_highlight.<[farm_key]>:!
         - foreach next
 
-
-      - define farm_area <proc[helpers_npc_get_value].context[area|<[farm_key]>]>
+      - define farm_area <proc[helpers_npc_get_value].context[area|null|<[farm_key]>]>
+      - debug log "<gold>Highlight (a1): <[farm_area]>"
 
       # If farm is no longer valid just skip it and let normal timeout clear it, cleaner, easier, more reliable
       - if <[farm_area]> :
@@ -786,9 +825,9 @@ helpers_highlight_refresh_farm:
         - playeffect effect:flame at:<[farm_border]> quantity:1  visibility:32 offset:0.0,0.1,0.0
         - define active:++
 
+    - debug log "<green>Highlight (b): <[active]> -- <[farm_area]>"
     - if <[active]>:
       - run helpers_highlight_refresh_farm delay:15t
-
 
 
 # = Scan for tool item and if found use it
@@ -854,40 +893,44 @@ helpers_npc_spawn:
   debug: false
   definitions: villager|owner|farm_key
   script:
-    - define villager_location <[villager].location>
-    # A farm key can be passed instead of an NPC (at least for this usage)
-    - define profession <proc[helpers_npc_get_value].context[profession|<[farm_key]>]>
-    - create player Helper<[profession]> <[villager_location]> save:npc_new
-    - define new_npc <entry[npc_new].created_npc>
-    - adjust <[new_npc]> owner:<[owner]>
-    # remove villager
-    - remove <[villager]>
+    - define profession <proc[helpers_npc_get_value].context[profession|null|<[farm_key]>]>
+
+    # if villager is already an NPC re-use it so this works for create OR repair
+    - if <[villager].is_npc>:
+      - define new_npc <[villager]>
+    - else:
+      - define villager_location <[villager].location>
+      # A farm key can be passed instead of an NPC (at least for this usage)
+      - create player Helper<[profession]> <[villager_location]> save:npc_new
+      - define new_npc <entry[npc_new].created_npc>
+      - adjust <[new_npc]> owner:<[owner]>
+      # remove villager
+      - remove <[villager]>
+
+      # Dress NPC basd on configuration file
+      # - ...uniform.hat.type, .color
+      - define uniform <proc[helpers_config].context[professions.<[profession]>.uniform]||null>
+      - if <[uniform]>:
+        - foreach <[uniform]> as:style key:item_type :
+          - define item <item[<[style].get[type]>]>
+          - define color <[style].get[color]||null>
+          - if <[color]>:
+            - adjust <[item]> color:<[color]>
+          # The equip requires a constant and apparently that happens before PARSING (so parsing is even weirder than I suspected). IN this case tags of the form 'tag_name:' are processed as arguments literals and their right side then PARSED.
+          - choose <[item_type]>:
+            - case head:
+              - equip <[new_npc]> head:<[item]>
+            - case chest:
+              - equip <[new_npc]> chest:<[item]>
+            - case legs:
+              - equip <[new_npc]> legs:<[item]>
+            - case boots:
+              - equip <[new_npc]> boots:<[item]>
+      - else:
+        - debug log "<red>Villager at <[villager_location]> cannot find uniform for <[profession]>"
 
     # Set attributes for this NPC
     - flag <[new_npc]> helpers.farm.key:<[farm_key]>
-
-    # Dress NPC basd on configuration file
-    # - ...uniform.hat.type, .color
-    - define uniform <proc[helpers_config].context[professions.<[profession]>.uniform]||null>
-    - if <[uniform]>:
-      - foreach <[uniform]> as:style key:item_type :
-        - define item <item[<[style].get[type]>]>
-        - define color <[style].get[color]||null>
-        - if <[color]>:
-          - adjust <[item]> color:<[color]>
-        # The equip requires a constant and apparently that happens before PARSING (so parsing is even weirder than I suspected). IN this case tags of the form 'tag_name:' are processed as arguments literals and their right side then PARSED.
-        - choose <[item_type]>:
-          - case head:
-            - equip <[new_npc]> head:<[item]>
-          - case chest:
-            - equip <[new_npc]> chest:<[item]>
-          - case legs:
-            - equip <[new_npc]> legs:<[item]>
-          - case boots:
-            - equip <[new_npc]> boots:<[item]>
-    - else:
-      - debug log "<red>Villager at <[villager_location]> cannot find uniform for <[profession]>"
-
     - adjust <[new_npc]> set_protected:false
     - pushable npc:<[new_npc]> state:true
     - adjust <[new_npc]> collidable:true
@@ -914,37 +957,37 @@ helpers_npc_spawn:
 # = path : DOT path to key to retrieve, do NOT include 'professions.<procession>' component as that is already preset
 # = npc_or_loc : The NPC to access, or a location or form_key
 # = default : defaults to null, otherwise the value to return if key path does not exist
-# = RETURNS the value for the configuration path OR false if there is no farm data/configuration
+# = RETURNS the value for the configuration path OR null if there is no farm data/configuration
 
 helpers_npc_get_value:
   type: procedure
-  definitions: path|npc_or_loc|default
+  definitions: path|default|npc_or_loc
   debug: false
   script:
 
   # If no npc data passed use current NPC
+  - define default <[default]||null>
   - define npc_or_loc <[npc_or_loc].if_null[null]>
+  - define farm_data null
   - if <[npc_or_loc]> == null:
     - if <npc.if_null[null]> == null:
-      - determine false
+      - debug log "<green>NPC NULL"
+      - determine <[farm_data]>
     - define npc_or_loc <npc>
 
   - if <[npc_or_loc].is_npc||false>:
-    # *** Use NPC data
-    - define npc_path helpers.farm.<[path]>
-    - if <[npc_or_loc].has_flag[<[npc_path]>]> :
-      - determine <[npc_or_loc].flag[<[npc_path]>]>
-    # Get farm data
-    - define farm_data <proc[helpers_farm_for_npc].context[<[npc_or_loc]>]||false>
+    - define farm_data <proc[helpers_farm_for_npc].context[<[npc_or_loc]>]||null>
   - else:
     # Assume a location
-    - define farm_data <proc[_helpers_farm_for_location].context[<[npc_or_loc]>]||false>
+    - define farm_data <proc[_helpers_farm_for_location].context[<[npc_or_loc]>]||null>
 
   # Farm data and configuration data applie to both NPC and FARM (currently, this could change someday)
-  - if ! <[farm_data]>:
+  - if <[farm_data]> == null:
     # No farm data so we cannot fetch profession which is needed for this npc
-    - determine false
-
+    - debug log "<red>Farm data not found: <npc>"
+    - determine <[default]>
+  
+  - debug log "<gold>Farm Data (988): <[farm_data]>"
   - define value <[farm_data].get[<[path]>].if_null[false]>
   - if <[value]>:
     - determine <[value]>
@@ -955,7 +998,7 @@ helpers_npc_get_value:
   - define value <proc[helpers_config].context[professions.<[profession]>.<[path]>]>
   - if <[value]> == null:
     # Trap error and return null
-    - define value <[default].if_null[null]>
+    - define value <[default]>
   - determine <[value]>
 
 
@@ -1027,7 +1070,7 @@ helpers_npc_is_farmer:
   script:
   - define current_npc <[current_npc]||<npc>>
   - define farm_data <proc[helpers_farm_for_npc].context[<[curent_npc]>]||false>
-  - if <[farm_data]>:
+  - if <[farm_data]> != null:
     # No farm data so we cannot fetch profession which is needed for this npc
     - determine true
   - determine false
@@ -1042,7 +1085,7 @@ helpers_farm_for_npc:
     - define farm_key <[current_npc].flag[helpers.farm.key]||false>
     - if <[farm_key]>:
       - determine <proc[_helpers_farm_for_location].context[<[farm_key]>]>
-    - determine false
+    - determine null
 
 # = return the farm data associated with the current NPC, allows override npc, otherwise uses context NPC
 _helpers_farm_for_location:
@@ -1053,7 +1096,7 @@ _helpers_farm_for_location:
     # normalize location so it can be a location or a simple, needed since [location].location does not work (it should but alas it does not)
     - define location <location[<[location]>]>
     - define farm_key helpers.farm.<[location].simple>
-    - determine  <server.flag[<[farm_key]>]||false>
+    - determine  <server.flag[<[farm_key]>].if_null[<map[ok=false]>]>
 
 
 # = Cleanup all missing farm keys and all removed NPC flags (ours and othres)
